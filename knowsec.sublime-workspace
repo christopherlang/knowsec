@@ -1,0 +1,373 @@
+{
+	"auto_complete":
+	{
+		"selected_items":
+		[
+			[
+				"find",
+				"find_all\tfunction"
+			],
+			[
+				"nasdaq",
+				"nasdaq_symbols2\tstatement"
+			],
+			[
+				"wi",
+				"writer\tfunction"
+			],
+			[
+				"nasda",
+				"nasdaq_symbols2\tstatement"
+			],
+			[
+				"read",
+				"DictReader\tclass"
+			],
+			[
+				"writ",
+				"writelines\tfunction"
+			],
+			[
+				"col_to",
+				"col_to_zero\tstatement"
+			]
+		]
+	},
+	"buffers":
+	[
+		{
+			"file": "src/data_functions.py",
+			"settings":
+			{
+				"buffer_size": 2607,
+				"encoding": "UTF-8",
+				"line_ending": "Windows"
+			}
+		}
+	],
+	"build_system": "",
+	"build_system_choices":
+	[
+	],
+	"build_varint": "",
+	"command_palette":
+	{
+		"height": 588.0,
+		"last_filter": "",
+		"selected_items":
+		[
+			[
+				"set text",
+				"Set Syntax: Plain Text"
+			],
+			[
+				"set pyt",
+				"Set Syntax: MagicPython"
+			],
+			[
+				"set p",
+				"Set Syntax: MagicPython"
+			],
+			[
+				"set py",
+				"Set Syntax: MagicPython"
+			],
+			[
+				"set java",
+				"Set Syntax: JavaScript"
+			],
+			[
+				"set html",
+				"Set Syntax: HTML"
+			],
+			[
+				"upper",
+				"Convert Case: Upper Case"
+			],
+			[
+				"set mag",
+				"Set Syntax: MagicPython"
+			],
+			[
+				"disa",
+				"Package Control: Disable Package"
+			],
+			[
+				"insta",
+				"Package Control: Install Package"
+			],
+			[
+				"disabl",
+				"Package Control: Disable Package"
+			],
+			[
+				"install",
+				"Package Control: Install Package"
+			],
+			[
+				"instal",
+				"Package Control: Install Package"
+			]
+		],
+		"width": 666.0
+	},
+	"console":
+	{
+		"height": 0.0,
+		"history":
+		[
+		]
+	},
+	"distraction_free":
+	{
+		"menu_visible": true,
+		"show_minimap": false,
+		"show_open_files": false,
+		"show_tabs": false,
+		"side_bar_visible": false,
+		"status_bar_visible": false
+	},
+	"expanded_folders":
+	[
+		"/C/Users/Christopher Lang/Documents/projects/knowsec"
+	],
+	"file_history":
+	[
+		"/C/Users/Christopher Lang/Documents/projects/d3_learnings/scatterplot.js",
+		"/C/Users/Christopher Lang/Documents/projects/d3_learnings/index.html",
+		"/C/Users/Christopher Lang/Documents/work/Paragard Tmp/src/Fixing distance matrix.py",
+		"/C/Users/Christopher Lang/Downloads/00 - Data processing.R",
+		"/C/Users/Christopher Lang/Documents/work/Paragard Tmp/src/DBSCAN.py",
+		"/C/Users/Christopher Lang/Documents/projects/d3_learnings/d3/d3.js",
+		"/C/Users/Christopher Lang/Documents/Mission Planner/logs/QUADROTOR/1/2018-03-04 23-29-01.log",
+		"/C/Users/Christopher Lang/Desktop/00000023.BIN",
+		"/C/Users/Christopher Lang/Documents/projects/easylog/easylog.py",
+		"/C/Users/Christopher Lang/Downloads/-.js",
+		"/C/Users/Christopher Lang/Documents/projects/easylog/.gitignore",
+		"/C/Users/Christopher Lang/Documents/projects/easylog/easylog_package.sublime-project",
+		"/C/Users/Christopher Lang/Desktop/sublimesettings.txt"
+	],
+	"find":
+	{
+		"height": 40.0
+	},
+	"find_in_files":
+	{
+		"height": 0.0,
+		"where_history":
+		[
+		]
+	},
+	"find_state":
+	{
+		"case_sensitive": false,
+		"find_history":
+		[
+			"\\",
+			"acc",
+			"accel",
+			"ATT",
+			"pitch",
+			"ctun",
+			", ",
+			" ",
+			"console",
+			"_log_controls",
+			"\\"
+		],
+		"highlight": true,
+		"in_selection": false,
+		"preserve_case": false,
+		"regex": true,
+		"replace_history":
+		[
+		],
+		"reverse": false,
+		"show_context": true,
+		"use_buffer2": true,
+		"whole_word": false,
+		"wrap": true
+	},
+	"groups":
+	[
+		{
+			"selected": 0,
+			"sheets":
+			[
+				{
+					"buffer": 0,
+					"file": "src/data_functions.py",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 2607,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								35,
+								35
+							]
+						],
+						"settings":
+						{
+							"SL.14.region_keys":
+							[
+								"SL.pylint.Highlights.|f380a5cf78924ed283f4988e9b21bf402ea8344b06938b6780e4c03970d504ce|region.yellowish markup.warning.sublime_linter|32",
+								"SL.pylint.Highlights.|c9777a6cbf6681b9011bd5a1c8ba6f97468d1bba9e64ebca76153d92e38e9fe2|region.yellowish markup.warning.sublime_linter|32",
+								"SL.pylint.Highlights.|632c9823ac2b080219ef6f84f4425ba9dd48a0d4e3419c87bc019293241afff8|region.yellowish markup.warning.sublime_linter|32",
+								"SL.pylint.Highlights.|e5c04b909621a7bb340f8a5d710a89919f3fe537fd2b46a6eb5d7c6e557cb00c|region.yellowish markup.warning.sublime_linter|32",
+								"SL.pylint.Highlights.|5f4108ab3237b3f0d081a0ee87e510a4d4f1dbffe6962c644eda32f961a49819|region.yellowish markup.warning.sublime_linter|32",
+								"SL.pylint.Highlights.|dc6f54a524e97dd1b071cf51b90a78e717d2b8fa28ab6cc328b1e19ed6cf1984|region.yellowish markup.warning.sublime_linter|32",
+								"SL.pylint.Highlights.|824282aa8d7ce9b544e266a5de76919ff7d371ac77c91f3190aa3c2804cf72d8|region.yellowish markup.warning.sublime_linter|32",
+								"SL.pylint.Highlights.|6ca6fd2eb39d20a8d0cb3eb5391c062c37cb32032b91ba11e0a83ffab6a0da7b|region.yellowish markup.warning.sublime_linter|32",
+								"sublime_linter.protected_regions",
+								"SL.pylint.Highlights.|c3092817cda169dcfcf206fd7fda3f5f49d7f326cb11ec013faee877164f52c5|region.yellowish markup.warning.sublime_linter|32",
+								"SL.pylint.Highlights.|b3f6d9f6796fd5539d5f13b92540c699f2999a3a6f318ebea625c8d1d15d4a00|region.yellowish markup.warning.sublime_linter|32",
+								"SL.pylint.Highlights.|30e1577d2f43ee0d5d1fff31c5760235c688ed0246711dc5e421c5b67047f931|region.yellowish markup.warning.sublime_linter|32",
+								"SL.pylint.Highlights.|5ecd6212c008fab64d89d2b62375ad80124db5ad2c0feb6c11b734f88a593fa2|region.yellowish markup.warning.sublime_linter|32",
+								"SL.pylint.Highlights.|b71ed53fdfd968531f1717b50ea38e3e07abd2e37df677bd75e3e72b8edf3e23|region.yellowish markup.warning.sublime_linter|32",
+								"SL.pylint.Highlights.|e6d1a80699b4a2fd4c6746d92992a726065bfba60585aec759d7a487e36c8ad4|region.yellowish markup.warning.sublime_linter|32",
+								"SL.pylint.Gutter.|region.yellowish markup.warning.sublime_linter|dot",
+								"SL.pylint.Highlights.|e40a540ac3fff41425edb6caa67fdedc6ad7f68cd5b3d1ebc336f257971c7522|region.yellowish markup.warning.sublime_linter|32",
+								"SL.pylint.Highlights.|f2bbc94aa0487065c6d2558b12baa73e8aae2ad830f87c32232d9d1d39d4607d|region.yellowish markup.warning.sublime_linter|32"
+							],
+							"SL.18.region_keys":
+							[
+							],
+							"auto_complete_triggers":
+							[
+								{
+									"characters": ".",
+									"selector": "source.python - string - comment - constant.numeric"
+								},
+								{
+									"characters": ".",
+									"selector": "source.python - string - constant.numeric"
+								},
+								{
+									"characters": ".",
+									"selector": "source.python - string - constant.numeric"
+								},
+								{
+									"characters": ".",
+									"selector": "source.python - string - constant.numeric"
+								}
+							],
+							"syntax": "Packages/MagicPython/grammars/MagicPython.tmLanguage"
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 0,
+					"type": "text"
+				}
+			]
+		},
+		{
+			"sheets":
+			[
+			]
+		}
+	],
+	"incremental_find":
+	{
+		"height": 28.0
+	},
+	"input":
+	{
+		"height": 0.0
+	},
+	"layout":
+	{
+		"cells":
+		[
+			[
+				0,
+				0,
+				1,
+				1
+			],
+			[
+				1,
+				0,
+				2,
+				1
+			]
+		],
+		"cols":
+		[
+			0.0,
+			0.5,
+			1.0
+		],
+		"rows":
+		[
+			0.0,
+			1.0
+		]
+	},
+	"menu_visible": true,
+	"output.SublimeLinter":
+	{
+		"height": 0.0
+	},
+	"output.SublimeLinter Messages":
+	{
+		"height": 132.0
+	},
+	"output.find_results":
+	{
+		"height": 0.0
+	},
+	"pinned_build_system": "",
+	"project": "knowsec.sublime-project",
+	"replace":
+	{
+		"height": 52.0
+	},
+	"save_all_on_build": true,
+	"select_file":
+	{
+		"height": 0.0,
+		"last_filter": "",
+		"selected_items":
+		[
+		],
+		"width": 0.0
+	},
+	"select_project":
+	{
+		"height": 0.0,
+		"last_filter": "",
+		"selected_items":
+		[
+		],
+		"width": 0.0
+	},
+	"select_symbol":
+	{
+		"height": 0.0,
+		"last_filter": "",
+		"selected_items":
+		[
+		],
+		"width": 0.0
+	},
+	"selected_group": 0,
+	"settings":
+	{
+	},
+	"show_minimap": true,
+	"show_open_files": false,
+	"show_tabs": true,
+	"side_bar_visible": true,
+	"side_bar_width": 407.0,
+	"status_bar_visible": true,
+	"template_settings":
+	{
+	}
+}
