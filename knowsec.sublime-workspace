@@ -39,7 +39,7 @@
 			"file": "src/data_functions.py",
 			"settings":
 			{
-				"buffer_size": 2607,
+				"buffer_size": 5195,
 				"encoding": "UTF-8",
 				"line_ending": "Windows"
 			}
@@ -56,6 +56,10 @@
 		"last_filter": "",
 		"selected_items":
 		[
+			[
+				"set python",
+				"Set Syntax: MagicPython"
+			],
 			[
 				"set text",
 				"Set Syntax: Plain Text"
@@ -200,39 +204,33 @@
 					"semi_transient": false,
 					"settings":
 					{
-						"buffer_size": 2607,
+						"buffer_size": 5195,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								35,
-								35
+								4257,
+								4257
 							]
 						],
 						"settings":
 						{
 							"SL.14.region_keys":
 							[
-								"SL.pylint.Highlights.|f380a5cf78924ed283f4988e9b21bf402ea8344b06938b6780e4c03970d504ce|region.yellowish markup.warning.sublime_linter|32",
-								"SL.pylint.Highlights.|c9777a6cbf6681b9011bd5a1c8ba6f97468d1bba9e64ebca76153d92e38e9fe2|region.yellowish markup.warning.sublime_linter|32",
-								"SL.pylint.Highlights.|632c9823ac2b080219ef6f84f4425ba9dd48a0d4e3419c87bc019293241afff8|region.yellowish markup.warning.sublime_linter|32",
-								"SL.pylint.Highlights.|e5c04b909621a7bb340f8a5d710a89919f3fe537fd2b46a6eb5d7c6e557cb00c|region.yellowish markup.warning.sublime_linter|32",
-								"SL.pylint.Highlights.|5f4108ab3237b3f0d081a0ee87e510a4d4f1dbffe6962c644eda32f961a49819|region.yellowish markup.warning.sublime_linter|32",
-								"SL.pylint.Highlights.|dc6f54a524e97dd1b071cf51b90a78e717d2b8fa28ab6cc328b1e19ed6cf1984|region.yellowish markup.warning.sublime_linter|32",
-								"SL.pylint.Highlights.|824282aa8d7ce9b544e266a5de76919ff7d371ac77c91f3190aa3c2804cf72d8|region.yellowish markup.warning.sublime_linter|32",
-								"SL.pylint.Highlights.|6ca6fd2eb39d20a8d0cb3eb5391c062c37cb32032b91ba11e0a83ffab6a0da7b|region.yellowish markup.warning.sublime_linter|32",
-								"sublime_linter.protected_regions",
-								"SL.pylint.Highlights.|c3092817cda169dcfcf206fd7fda3f5f49d7f326cb11ec013faee877164f52c5|region.yellowish markup.warning.sublime_linter|32",
 								"SL.pylint.Highlights.|b3f6d9f6796fd5539d5f13b92540c699f2999a3a6f318ebea625c8d1d15d4a00|region.yellowish markup.warning.sublime_linter|32",
-								"SL.pylint.Highlights.|30e1577d2f43ee0d5d1fff31c5760235c688ed0246711dc5e421c5b67047f931|region.yellowish markup.warning.sublime_linter|32",
-								"SL.pylint.Highlights.|5ecd6212c008fab64d89d2b62375ad80124db5ad2c0feb6c11b734f88a593fa2|region.yellowish markup.warning.sublime_linter|32",
+								"SL.pylint.Highlights.|fb9fd3426fc027a347d14881a10508fd271b9f80b398bffa25e13fbd3358b7bd|region.yellowish markup.warning.sublime_linter|32",
 								"SL.pylint.Highlights.|b71ed53fdfd968531f1717b50ea38e3e07abd2e37df677bd75e3e72b8edf3e23|region.yellowish markup.warning.sublime_linter|32",
-								"SL.pylint.Highlights.|e6d1a80699b4a2fd4c6746d92992a726065bfba60585aec759d7a487e36c8ad4|region.yellowish markup.warning.sublime_linter|32",
+								"SL.pylint.Highlights.|da1254805bbd221fd965923253fc13ceb7c168fb20d5931617d341d4f3bf8bfb|region.yellowish markup.warning.sublime_linter|32",
+								"SL.pylint.Highlights.|8c28aa94534df19d4f9d1613e8a7324ded513e0a546f1620308e91f44fb7de06|region.yellowish markup.warning.sublime_linter|32",
+								"SL.pylint.Highlights.|b0ba1fcfe83b8a57b2da55e2a49468b49679b25c3199886759c4f50cd1f85893|region.yellowish markup.warning.sublime_linter|32",
+								"SL.pylint.Highlights.|47e01622c99589f1818be9cf38e6fdce54c01df8aafba13a9cd17b9dfd723238|region.yellowish markup.warning.sublime_linter|32",
+								"SL.pylint.Highlights.|197dd94e528e1685ba00c23b7df189b4fd9d5e27a4e809e23c9c7eb9520b8e78|region.yellowish markup.warning.sublime_linter|32",
+								"SL.pylint.Highlights.|784059b4062818deb94b2207001c4d40387df166a762c1484cc57ddf93974599|region.yellowish markup.warning.sublime_linter|32",
+								"SL.pylint.Highlights.|6ca6fd2eb39d20a8d0cb3eb5391c062c37cb32032b91ba11e0a83ffab6a0da7b|region.yellowish markup.warning.sublime_linter|32",
 								"SL.pylint.Gutter.|region.yellowish markup.warning.sublime_linter|dot",
-								"SL.pylint.Highlights.|e40a540ac3fff41425edb6caa67fdedc6ad7f68cd5b3d1ebc336f257971c7522|region.yellowish markup.warning.sublime_linter|32",
-								"SL.pylint.Highlights.|f2bbc94aa0487065c6d2558b12baa73e8aae2ad830f87c32232d9d1d39d4607d|region.yellowish markup.warning.sublime_linter|32"
+								"sublime_linter.protected_regions"
 							],
 							"SL.18.region_keys":
 							[
@@ -259,7 +257,7 @@
 							"syntax": "Packages/MagicPython/grammars/MagicPython.tmLanguage"
 						},
 						"translation.x": 0.0,
-						"translation.y": 0.0,
+						"translation.y": 2166.0,
 						"zoom_level": 1.0
 					},
 					"stack_index": 0,
