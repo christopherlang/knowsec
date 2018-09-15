@@ -3,7 +3,7 @@ import re
 import json
 from datetime import datetime as dt
 import pandas
-import quandl
+import pytz
 from bs4 import BeautifulSoup
 
 
@@ -191,11 +191,6 @@ class TimeSeriesData:
                 'requests': 0,
                 'apikey': 'ARH5UW8CMDRTXLDM',
                 'last_request': None
-            },
-            'Quandl': {
-                'request': 0,
-                'apikey': None,
-                'last_request': None
             }
         }
 
@@ -210,6 +205,48 @@ class TimeSeriesData:
     def source_metadata(self):
         return self._source_metadata
 
+    def get_quote(self, symbols):
+        if isinstance(symbols, str):
+            symbolList = [symbols]
+        else:
+            symbolList = symbols
+
+            if len(symbolList) > 25:
+                symbolList = symbolList[0:25]
+
+        symbolList = ','.join(symbolList)
+
+        url = 'https://marketdata.websol.barchart.com/getQuote.json'
+        params = {
+            'apikey': 'edfaca2b49e5b010c2c39298a89a37ac',
+            'symbols': symbolList
+        }
+
+        req = requests.get(url, params=params)
+        symbol_quotes = req.json()['results']
+        symbol_quotes = [i for i in symbol_quotes if i['mode'] == 'd']
+
+        eastern_tz = pytz.timezone('US/Eastern')
+
+        for a_quote in symbol_quotes:
+            a_quote['Datetime'] = a_quote['tradeTimestamp'][0:19]
+            a_quote['Datetime'] = dt.strptime(a_quote['Datetime'],
+                                              '%Y-%m-%dT%H:%M:%S')
+            a_quote['Datetime'] = (
+                eastern_tz.localize(a_quote['Datetime'])
+                .astimezone(pytz.timezone('UTC'))
+            )
+
+        quotes = (
+            pandas.DataFrame.from_dict(symbol_quotes)
+            .filter(items=['symbol', 'Datetime', 'open',
+                           'high', 'low', 'close', 'volume'])
+            .rename(index=str, columns={'symbol': 'Symbol'})
+            .set_index(['Symbol', 'Datetime'])
+        )
+
+        return quotes
+
     def get_stockprices(self, symbol, **kwargs):
         result = None
 
@@ -218,22 +255,6 @@ class TimeSeriesData:
         if self._sources['stocks'] == 'Alpha Vantage':
             result = self._stocksource_alphavantage(symbol=symbol,
                                                     args=kwargs)
-
-        elif self._sources['stocks'] == 'Quandl':
-            qdb = kwargs['database']
-            del kwargs['database']
-            result = self._stocksource_quandl(symbol=symbol, database=qdb,
-                                              **kwargs)
-
-        return result
-
-    def _stocksource_quandl(self, symbol, database, **kwargs):
-        query_name = '/'.join([database, symbol])
-        result = quandl.get(query_name,
-                            apikey=self._source_metadata['Quandl']['apikey'],
-                            **kwargs)
-        self._source_metadata['Quandl']['requests'] += 1
-        self._source_metadata['Quandl']['last_request'] = dt.utcnow()
 
         return result
 
@@ -267,7 +288,9 @@ class TimeSeriesData:
 
         req = requests.get(url, params=params)
         self._source_metadata['Alpha Vantage']['requests'] += 1
-        self._source_metadata['Alpha Vantage']['last_request'] = dt.utcnow()
+        self._source_metadata['Alpha Vantage']['last_request'] = (
+            pytz.timezone('UTC').localize(dt.utcnow())
+        )
 
         # req_metadata = dict()
         # req_metadata['encoding'] = req.apparent_encoding
@@ -279,49 +302,42 @@ class TimeSeriesData:
 
         # api_metadata = req.json()['Meta Data']
 
+        # Get time zone
+        data_tz = req.json()['Meta Data'].keys()
+        data_tz = [i for i in data_tz if i.lower().find('time zone') != -1][0]
+        data_tz = req.json()['Meta Data'][data_tz]
+        data_tz = pytz.timezone(data_tz)
+
         json_head = req.json().keys()
         ts_key = [i for i in json_head if i.lower().find('time series') != -1]
         ts_key = ts_key[0]
 
         ts_data = req.json()[ts_key]
 
-        headers = [list(i.keys()) for i in ts_data.values()]
-        column_headers = [item for sublist in headers for item in sublist]
-        column_headers = list(set(column_headers))
-        column_headers.sort()
-        column_headers = [(i, re.sub('\d[.]\s', '', i))
-                          for i in column_headers]
-
-        ts_data_formed = dict()
-        ts_data_formed['Symbol'] = list()
-
-        ts_data_timestamp = list()
-        for _, header in column_headers:
-            ts_data_formed[header] = list()
+        colheaders = [list(i.keys()) for i in ts_data.values()]
+        colheaders = [item for sublist in colheaders for item in sublist]
+        colheaders = list(set(colheaders))
+        colheaders.sort()
+        colrenames = {k: re.sub('\d[.]\s', '', k) for k in colheaders}
 
         for date, row in ts_data.items():
-            ts_data_formed['Symbol'].append(symbol)
-            ts_data_timestamp.append(dt.strptime(date, '%Y-%m-%d'))
+            for row_element_name in row:
+                if row_element_name.find('volume') != -1:
+                    row[row_element_name] = int(row[row_element_name])
+                else:
+                    row[row_element_name] = float(row[row_element_name])
 
-            for old_header, pd_header in column_headers:
-                ts_data_formed[pd_header].append(row[old_header])
+            row['Datetime'] = data_tz.localize(dt.strptime(date, '%Y-%m-%d'))
+            row['Datetime'] = row['Datetime'].astimezone(pytz.timezone('UTC'))
 
-        column_headers = [i[1] for i in column_headers]
-        column_headers.insert(0, 'Symbol')
+            row['Symbol'] = symbol
 
-        result_df = pandas.DataFrame(data=ts_data_formed,
-                                     columns=column_headers)
+        ts_data = [i for i in ts_data.values()]
 
-        result_df.set_index(pandas.DatetimeIndex(ts_data_timestamp,
-                                                 name='Date'),
-                            inplace=True)
+        histprice = (
+            pandas.DataFrame.from_dict(ts_data)
+            .set_index(['Symbol', 'Datetime'])
+            .rename(index=str, columns=colrenames)
+        )
 
-        for col in column_headers:
-            if col == 'Symbol':
-                result_df[col] = result_df[col].astype('str')
-            elif col == 'volume':
-                result_df[col] = result_df[col].astype('int64')
-            else:
-                result_df[col] = result_df[col].astype('float64')
-
-        return result_df
+        return histprice

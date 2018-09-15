@@ -3,10 +3,11 @@ import os
 import yaml
 from lib import dfu
 from lib import database
+import pytz
 
 
-os.chdir('C:/Users/Christopher Lang/Documents/projects/knowsec')
-
+# os.chdir('C:/Users/Christopher Lang/Documents/projects/knowsec')
+os.chdir('/Users/christopherlang/Documents/projects/knowsec')
 CONFIG = dict()
 with open('config/data_config.yaml', 'r') as f:
     CONFIG['data'] = yaml.load(f)
@@ -23,4 +24,3 @@ comp_table = comp_table[0].append(comp_table[1]).append(comp_table[2])
 db.update_company(comp_table)
 
 tsdata = dfu.TimeSeriesData()
-
