@@ -1,3 +1,6 @@
+# Additional annoying files/directories
+.DS_Store
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *_pycache_*
