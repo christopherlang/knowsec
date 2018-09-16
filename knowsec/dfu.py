@@ -292,16 +292,6 @@ class TimeSeriesData:
             pytz.timezone('UTC').localize(dt.utcnow())
         )
 
-        # req_metadata = dict()
-        # req_metadata['encoding'] = req.apparent_encoding
-        # req_metadata['headers'] = req.headers
-        # req_metadata['is_redirect'] = req.is_redirect
-        # req_metadata['request_reason'] = req.reason
-        # req_metadata['status_code'] = req.status_code
-        # req_metadata['url'] = req.url
-
-        # api_metadata = req.json()['Meta Data']
-
         # Get time zone
         data_tz = req.json()['Meta Data'].keys()
         data_tz = [i for i in data_tz if i.lower().find('time zone') != -1][0]
@@ -341,3 +331,15 @@ class TimeSeriesData:
         )
 
         return histprice
+
+    def _request_metadata(self, req):
+        req_metadata = dict()
+        req_metadata['encoding'] = req.apparent_encoding
+        req_metadata['headers'] = req.headers
+        req_metadata['is_redirect'] = req.is_redirect
+        req_metadata['request_reason'] = req.reason
+        req_metadata['status_code'] = req.status_code
+        req_metadata['url'] = req.url
+        req_metadata['api_meta'] = req.json()['Meta Data']
+
+        return req_metadata
