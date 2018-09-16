@@ -62,7 +62,7 @@ def get_exchange(exchange="NASDAQ"):
     df_result['MarketCap'] = pandas.to_numeric(df_result['MarketCap'])
     df_result['IPOyear'] = pandas.to_numeric(df_result['IPOyear'])
     df_result['ExchangeListing'] = exchange
-    df_result['Update_dt'] = dt.utcnow().isoformat()
+    df_result['Update_dt'] = pytz.timezone('UTC').localize(dt.utcnow())
 
     return df_result
 
