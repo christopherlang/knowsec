@@ -5,6 +5,7 @@ from datetime import datetime as dt
 import pandas
 import pytz
 from bs4 import BeautifulSoup
+from abc import ABCMeta, abstractmethod
 
 
 def get_exchange(exchange="NASDAQ"):
@@ -343,3 +344,170 @@ class TimeSeriesData:
         req_metadata['api_meta'] = req.json()['Meta Data']
 
         return req_metadata
+
+
+class DataSource(metaclass=ABCMeta):
+
+    def __init__(self, timezone='UTC'):
+        self._source_name = 'Source Name'
+        self._valid_name = 'SourceName'
+        self._access_key = '<apikey>'
+        self._access_type = 'REST'
+        self._api_url = 'https://apiurl.com/'
+        self._access_log = {
+            'total_requests': 0,
+            'last_request': None
+        }
+        # self._access_transactions = list()
+        self._tz = pytz.timezone(timezone)
+
+    @property
+    @abstractmethod
+    def source_name(self):
+        return self._source_name
+
+    @property
+    @abstractmethod
+    def valid_name(self):
+        return self._valid_name
+
+    @property
+    @abstractmethod
+    def access_key(self):
+        return self._access_key
+
+    @property
+    @abstractmethod
+    def access_type(self):
+        return self._access_type
+
+    @property
+    @abstractmethod
+    def api_url(self):
+        return self._api_url
+
+    @property
+    @abstractmethod
+    def access_log(self):
+        return self._access_log
+
+    @abstractmethod
+    def get_data(self):
+        pass
+
+    def _update_log(self):
+        self._access_log['total_requests'] += 1
+        self._access_log['last_request'] = self._tz.localize(dt.utcnow())
+
+
+class AlphaAdvantage(DataSource):
+    def __init__(self, timezone='UTC'):
+        super().__init__(timezone)
+
+        self._source_name = 'Alpha Advantage'
+        self._valid_name = 'AlphaVantage'
+        self._access_key = 'ARH5UW8CMDRTXLDM'
+        self._api_url = 'https://www.alphavantage.co/query'
+        self._access_type = 'REST'
+        self._access_log = {
+            'total_requests': 0,
+            'last_request': None
+        }
+
+        self._functions = {
+            'daily': 'TIME_SERIES_DAILY',
+            'weekly': 'TIME_SERIES_WEEKLY',
+            'monthly': 'TIME_SERIES_MONTHLY',
+            'daily_adj': 'TIME_SERIES_DAILY_ADJUSTED',
+            'weekly_adj': 'TIME_SERIES_WEEKLY_ADJUSTED',
+            'monthly_adj': 'TIME_SERIES_MONTHLY_ADJUSTED'
+        }
+        self._default_period = 'daily_adj'
+        self._default_output = 'compact'
+
+    @property
+    def source_name(self):
+        return self._source_name
+
+    @property
+    def valid_name(self):
+        return self._valid_name
+
+    @property
+    def access_key(self):
+        return self._access_key
+
+    @property
+    def api_url(self):
+        return self._api_url
+
+    @property
+    def access_type(self):
+        return self._access_type
+
+    @property
+    def access_log(self):
+        return self._access_log
+
+    def get_data(self, symbol, frequency='daily_adj', output='compact'):
+        if frequency not in self._functions.keys():
+            errmsg = 'param:frequency must be one of'
+            errmsg += ", ".join(self._functions.keys())
+
+            raise ValueError(errmsg)
+
+        if output not in ['compact', 'full']:
+            raise ValueError("param:output must be one of 'compact', 'full'")
+
+        if isinstance(symbol, str) is not True:
+            raise TypeError('param:symbol must be a string')
+
+        params = {
+            'function': self._functions[frequency],
+            'symbol': symbol,
+            'apikey': 'ARH5UW8CMDRTXLDM',
+            'outputsize': output
+        }
+
+        req = requests.get(self._api_url, params=params)
+
+        req_metadata = req.json()['Meta Data']
+
+        # Get time zone
+        data_tz = pytz.timezone(req_metadata['5. Time Zone'])
+
+        # Extract the time series stock prices
+        ts_key = [i for i in req.json().keys() if i != 'Meta Data'][0]
+
+        req_result = req.json()[ts_key]
+
+        colheaders = [list(i.keys()) for i in req_result.values()]
+        colheaders = [item for sublist in colheaders for item in sublist]
+        colheaders = list(set(colheaders))
+        colheaders.sort()
+        colrenames = {k: re.sub('\d[.]\s', '', k).replace(' ', '_')
+                      for k in colheaders}
+
+        for date, row in req_result.items():
+            for row_element_name in row:
+                if row_element_name.find('volume') != -1:
+                    row[row_element_name] = int(row[row_element_name])
+                else:
+                    row[row_element_name] = float(row[row_element_name])
+
+            row['Datetime'] = data_tz.localize(dt.strptime(date, '%Y-%m-%d'))
+            row['Datetime'] = row['Datetime'].astimezone(pytz.timezone('UTC'))
+
+            row['Symbol'] = symbol
+
+        ts_data = [i for i in req_result.values()]
+
+        histprice = (
+            pandas.DataFrame.from_dict(ts_data)
+            .set_index(['Symbol', 'Datetime'])
+            .rename(index=str, columns=colrenames)
+        )
+
+        self._update_log()
+
+        return histprice
