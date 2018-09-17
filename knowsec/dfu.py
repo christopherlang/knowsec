@@ -347,7 +347,35 @@ class TimeSeriesData:
 
 
 class DataSource(metaclass=ABCMeta):
+    """Metaclass defining a standardized data source API
 
+    Classes that inherit this metaclass will have standardized properties and
+    methods useful to retrieve data and get information about the data source
+    itself, such as the name, api keys (if applicable), request logs, etc.
+
+    The primary way to interact with classes that inherit this metaclass is the
+    abstract method `get_data`, with parameters as needed. This method should
+    return `pandas.core.frame.DataFrame` whenever possible. Other structures
+    are allowed where when needed however. The output data structure, types,
+    and others must be explicitly described in the method's docstring
+
+    In child class make sure you `super().__init__()` before the class
+    instantiates its own properties
+
+    Parameters
+    ----------
+    timezone : str
+        The timezone used for returning datetime object. Strongly recommended
+        to leave as 'UTC'
+
+    Attributes
+    ----------
+    source_name
+    valid_name
+    access_key
+    api_url
+    access_log
+    """
     def __init__(self, timezone='UTC'):
         self._source_name = 'Source Name'
         self._valid_name = 'SourceName'
@@ -364,38 +392,46 @@ class DataSource(metaclass=ABCMeta):
     @property
     @abstractmethod
     def source_name(self):
+        """str: The pretty name of the data source"""
         return self._source_name
 
     @property
     @abstractmethod
     def valid_name(self):
+        """str: Alphanumeric form and underscore of `source_name`"""
         return self._valid_name
 
     @property
     @abstractmethod
     def access_key(self):
+        """str or None: The API key used to access the web API"""
         return self._access_key
 
     @property
     @abstractmethod
     def access_type(self):
+        """str: The type of the data source e.g. REST, python client, etc."""
         return self._access_type
 
     @property
     @abstractmethod
     def api_url(self):
+        """str or None: The API URL for accessing the resource"""
         return self._api_url
 
     @property
     @abstractmethod
     def access_log(self):
+        """dict: A running log of request operations"""
         return self._access_log
 
     @abstractmethod
     def get_data(self):
+        """Retrieve resource from the data source"""
         pass
 
     def _update_log(self):
+        """Internal method to update the `access_log` property"""
         self._access_log['total_requests'] += 1
         self._access_log['last_request'] = self._tz.localize(dt.utcnow())
 
