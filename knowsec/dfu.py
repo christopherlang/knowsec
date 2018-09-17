@@ -6,7 +6,7 @@ import pandas
 import pytz
 from bs4 import BeautifulSoup
 from abc import ABCMeta, abstractmethod
-import decimal
+import numpy as np
 
 
 def get_exchange(exchange="NASDAQ"):
@@ -348,7 +348,7 @@ class TimeSeriesData:
 
 
 class DataSource(metaclass=ABCMeta):
-    """Metaclass defining a standardized data source API
+    """Parent class defining a standardized data source API
 
     Classes that inherit this metaclass will have standardized properties and
     methods useful to retrieve data and get information about the data source
@@ -390,6 +390,7 @@ class DataSource(metaclass=ABCMeta):
     api_url
     access_type
     access_log
+    timezone
     """
 
     def __init__(self, timezone='UTC'):
@@ -403,55 +404,53 @@ class DataSource(metaclass=ABCMeta):
             'last_request': None
         }
         # self._access_transactions = list()
-        self._tz = pytz.timezone(timezone)
+        self._timezone = pytz.timezone(timezone)
 
     @property
-    @abstractmethod
     def source_name(self):
         """str: The pretty name of the data source"""
 
         return self._source_name
 
     @property
-    @abstractmethod
     def valid_name(self):
         """str: Alphanumeric form and underscore of `source_name`"""
 
         return self._valid_name
 
     @property
-    @abstractmethod
     def access_key(self):
         """str or None: The API key used to access the web API"""
 
         return self._access_key
 
     @property
-    @abstractmethod
     def access_type(self):
         """str: The type of the data source e.g. REST, python client, etc."""
 
         return self._access_type
 
     @property
-    @abstractmethod
     def api_url(self):
         """str or None: The API URL for accessing the resource"""
 
         return self._api_url
 
     @property
-    @abstractmethod
     def access_log(self):
         """dict: A running log of request operations"""
 
         return self._access_log
 
+    @property
+    def timezone(self):
+        return self._timezone
+
     def _update_log(self):
         """Internal method to update the `access_log` property"""
 
         self._access_log['total_requests'] += 1
-        self._access_log['last_request'] = self._tz.localize(dt.utcnow())
+        self._access_log['last_request'] = self._timezone.localize(dt.utcnow())
 
 
 class AlphaAdvantage(DataSource):
@@ -459,8 +458,6 @@ class AlphaAdvantage(DataSource):
 
     Alpha Vantage offers free stock data through a web API. Class currently
     only supports EOD stock prices
-
-    Class instances will have access to data through the `get_data` method
 
     Parameters
     ----------
@@ -477,6 +474,7 @@ class AlphaAdvantage(DataSource):
     access_type
     access_log
     series
+    timezone
     """
 
     def __init__(self, timezone='UTC'):
@@ -502,15 +500,15 @@ class AlphaAdvantage(DataSource):
         }
 
         self._dtype_map = {
-            '1. open': decimal.Decimal,
-            '2. high': decimal.Decimal,
-            '3. low': decimal.Decimal,
-            '4. close': decimal.Decimal,
-            '5. volume': int,
-            '6. volume': int,
-            '5. adjusted close': decimal.Decimal,
-            '7. dividend amount': decimal.Decimal,
-            '8. split coefficient': decimal.Decimal
+            '1. open': np.float64,
+            '2. high': np.float64,
+            '3. low': np.float64,
+            '4. close': np.float64,
+            '5. volume': np.int64,
+            '6. volume': np.int64,
+            '5. adjusted close': np.float64,
+            '7. dividend amount': np.float64,
+            '8. split coefficient': np.float64
         }
 
         self._column_rename = {
@@ -527,42 +525,7 @@ class AlphaAdvantage(DataSource):
 
         self._default_period = 'ts_stock_da'
         self._default_output = 'compact'
-
-    @property
-    def source_name(self):
-        """str: The pretty name of the data source"""
-
-        return self._source_name
-
-    @property
-    def valid_name(self):
-        """str: Alphanumeric form and underscore of `source_name`"""
-
-        return self._valid_name
-
-    @property
-    def access_key(self):
-        """str or None: The API key used to access the web API"""
-
-        return self._access_key
-
-    @property
-    def api_url(self):
-        """str or None: The API URL for accessing the resource"""
-
-        return self._api_url
-
-    @property
-    def access_type(self):
-        """str: The type of the data source e.g. REST, python client, etc."""
-
-        return self._access_type
-
-    @property
-    def access_log(self):
-        """str or None: The API URL for accessing the resource"""
-
-        return self._access_log
+        self._timezone = pytz.timezone(timezone)
 
     @property
     def series(self):
@@ -643,7 +606,7 @@ class AlphaAdvantage(DataSource):
                 row[row_element_name] = self._dtype_map[row_element_name](val)
 
             row['Datetime'] = data_tz.localize(dt.strptime(date, '%Y-%m-%d'))
-            row['Datetime'] = row['Datetime'].astimezone(pytz.timezone('UTC'))
+            row['Datetime'] = row['Datetime'].astimezone(self._timezone)
 
             row['Symbol'] = symbol
 
@@ -656,3 +619,112 @@ class AlphaAdvantage(DataSource):
         }
 
         return result
+
+
+class Barchart(DataSource):
+    """Access stock data from barchart
+
+    barchart offers free stock data through a web API. Class currently
+    only supports EOD stock prices through the 'getQuote' and 'getHistory' API
+
+    Parameters
+    ----------
+    timezone : str
+        The timezone used for returning datetime object. Strongly recommended
+        to leave as 'UTC'
+
+    Attributes
+    ----------
+    source_name
+    valid_name
+    access_key
+    api_url
+    access_type
+    access_log
+    timezone
+    """
+
+    def __init__(self, timezone='UTC'):
+        self._source_name = 'barchart'
+        self._valid_name = 'barchart'
+        self._access_key = 'edfaca2b49e5b010c2c39298a89a37ac'
+        self._access_type = 'REST'
+        self._api_url = 'https://marketdata.websol.barchart.com'
+        self._access_log = {
+            'total_requests': 0,
+            'last_request': None
+        }
+        # self._access_transactions = list()
+        self._timezone = pytz.timezone(timezone)
+
+        self._dtype_map = {
+            'symbol': str,
+            'name': str,
+            'exchange': str,
+            'tradeTimestamp': _to_datetime_utc,
+            'open': np.float64,
+            'low': np.float64,
+            'high': np.float64,
+            'lastPrice': np.float64,
+            'close': np.float64,
+            'volume': np.int64,
+            'percentChange': np.float64,
+            'netChange': np.float64,
+            'mode': str,
+            'dayCode': str,
+            'flag': str,
+            'unitCode': str,
+            'serverTimestamp': _to_datetime_utc,
+            'tradeTimestamp': _to_datetime_utc
+        }
+
+        self._column_rename = {
+            'symbol': 'Symbol',
+            'tradeTimestamp': 'Datetime'
+        }
+
+    def retrieve_securities_quote(self, symbols):
+        if isinstance(symbols, str):
+            symbolList = [symbols]
+        else:
+            symbolList = symbols
+
+            if len(symbolList) > 25:
+                symbolList = symbolList[0:25]
+
+        symbolList = ','.join(symbolList)
+
+        resource = self._retrieve('getQuote.json', symbolList)
+
+        quotes = (
+            pandas.DataFrame.from_dict(resource)
+            .rename(index=str, columns=self._column_rename)
+            .set_index(['Symbol', 'Datetime'])
+        )
+
+        return quotes
+
+    def _retrieve(self, endpoint, symbols):
+        api_url = '/'.join([self._api_url, endpoint])
+
+        params = {
+            'apikey': self._access_key,
+            'symbols': symbols
+        }
+
+        req = requests.get(api_url, params=params)
+
+        symbol_quotes = req.json()['results']
+
+        for a_quote in symbol_quotes:
+            for colname in a_quote:
+                a_quote[colname] = self._dtype_map[colname](a_quote[colname])
+
+        return symbol_quotes
+
+
+def _to_datetime_utc(datetime_str, tz=pytz.timezone('US/Eastern')):
+    r = dt.strptime(datetime_str[0:19], '%Y-%m-%dT%H:%M:%S')
+    r = tz.localize(r).astimezone(pytz.timezone('UTC'))
+
+    return r
