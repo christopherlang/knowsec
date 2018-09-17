@@ -374,6 +374,7 @@ class DataSource(metaclass=ABCMeta):
     valid_name
     access_key
     api_url
+    access_type
     access_log
     """
 
