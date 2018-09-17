@@ -361,6 +361,19 @@ class DataSource(metaclass=ABCMeta):
 
     In child class make sure you `super().__init__()` before the class
     instantiates its own properties
+    
+    Standard Naming for Retrieval
+    -----------------------------
+    Method names for retrieving resource should adhere to the following:
+        - All lowercase whenever possible
+        - Max three words, delimited by '_'
+        - start with 'get_'
+        - followed by series type e.g. stocks, FX, etc. One word only
+        - optionally followed by 'data' or 'series', where applicable
+        
+   Ex. 'get_stock_series', `get_cpi_series`, `get_fx_series`
+   
+   Avoid a general 'get_series' method. We're just standarding properties
 
     Parameters
     ----------
@@ -432,12 +445,6 @@ class DataSource(metaclass=ABCMeta):
         """dict: A running log of request operations"""
 
         return self._access_log
-
-    @abstractmethod
-    def get_data(self):
-        """Retrieve resource from the data source"""
-
-        pass
 
     def _update_log(self):
         """Internal method to update the `access_log` property"""
