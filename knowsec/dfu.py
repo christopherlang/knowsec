@@ -376,6 +376,7 @@ class DataSource(metaclass=ABCMeta):
     api_url
     access_log
     """
+
     def __init__(self, timezone='UTC'):
         self._source_name = 'Source Name'
         self._valid_name = 'SourceName'
@@ -393,45 +394,53 @@ class DataSource(metaclass=ABCMeta):
     @abstractmethod
     def source_name(self):
         """str: The pretty name of the data source"""
+
         return self._source_name
 
     @property
     @abstractmethod
     def valid_name(self):
         """str: Alphanumeric form and underscore of `source_name`"""
+
         return self._valid_name
 
     @property
     @abstractmethod
     def access_key(self):
         """str or None: The API key used to access the web API"""
+
         return self._access_key
 
     @property
     @abstractmethod
     def access_type(self):
         """str: The type of the data source e.g. REST, python client, etc."""
+
         return self._access_type
 
     @property
     @abstractmethod
     def api_url(self):
         """str or None: The API URL for accessing the resource"""
+
         return self._api_url
 
     @property
     @abstractmethod
     def access_log(self):
         """dict: A running log of request operations"""
+
         return self._access_log
 
     @abstractmethod
     def get_data(self):
         """Retrieve resource from the data source"""
+
         pass
 
     def _update_log(self):
         """Internal method to update the `access_log` property"""
+
         self._access_log['total_requests'] += 1
         self._access_log['last_request'] = self._tz.localize(dt.utcnow())
 
