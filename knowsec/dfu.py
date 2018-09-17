@@ -455,7 +455,7 @@ class DataSource(metaclass=ABCMeta):
 
 
 class AlphaAdvantage(DataSource):
-    """Access stock date from Alpha Vantage
+    """Access stock data from Alpha Vantage
 
     Alpha Vantage offers free stock data through a web API. Class currently
     only supports EOD stock prices
@@ -604,12 +604,25 @@ class AlphaAdvantage(DataSource):
         if isinstance(symbol, str) is not True:
             raise TypeError('param:symbol must be a string')
 
+        resource = self._retrieve(series=series, symbol=symbol, output=output)
+
+        histprice = (
+            pandas.DataFrame.from_dict(resource['series'])
+            .set_index(['Symbol', 'Datetime'], verify_integrity=True)
+            .rename(index=str, columns=self._column_rename)
+        )
+
+        self._update_log()
+
+        return histprice
+
+    def _retrieve(self, series, symbol, output, datatype='json'):
         params = {
             'function': self._series[series],
             'symbol': symbol,
-            'apikey': 'ARH5UW8CMDRTXLDM',
+            'apikey': self._access_key,
             'outputsize': output,
-            'datatype': 'json'
+            'datatype': datatype
         }
 
         req = requests.get(self._api_url, params=params)
@@ -636,12 +649,10 @@ class AlphaAdvantage(DataSource):
 
         ts_data = [i for i in req_result.values()]
 
-        histprice = (
-            pandas.DataFrame.from_dict(ts_data)
-            .set_index(['Symbol', 'Datetime'], verify_integrity=True)
-            .rename(index=str, columns=self._column_rename)
-        )
+        result = {
+            'meta_data': req_metadata,
+            'timezone': data_tz,
+            'series': ts_data
+        }
 
-        self._update_log()
-
-        return histprice
+        return result
