@@ -361,19 +361,19 @@ class DataSource(metaclass=ABCMeta):
 
     In child class make sure you `super().__init__()` before the class
     instantiates its own properties
-    
+
     Standard Naming for Retrieval
     -----------------------------
     Method names for retrieving resource should adhere to the following:
         - All lowercase whenever possible
         - Max three words, delimited by '_'
-        - start with 'get_'
+        - start with 'retrieve_' (the word retrieve is exclusive to this)
         - followed by series type e.g. stocks, FX, etc. One word only
         - optionally followed by 'data' or 'series', where applicable
-        
-   Ex. 'get_stock_series', `get_cpi_series`, `get_fx_series`
-   
-   Avoid a general 'get_series' method. We're just standarding properties
+
+   Ex. 'retrieve_stock_series', `retrieve_cpi_series`, `retrieve_fx_series`
+
+   Avoid a general 'retrieve_series' method. We're just standarding properties
 
     Parameters
     ----------
