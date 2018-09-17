@@ -569,15 +569,18 @@ class AlphaAdvantage(DataSource):
 
         resource = self._retrieve(series=series, symbol=symbol, output=output)
 
-        histprice = (
-            pandas.DataFrame.from_dict(resource['series'])
-            .set_index(['Symbol', 'Datetime'], verify_integrity=True)
+        histprice = pandas.DataFrame.from_dict(resource['series'])
+        histprice['Datetime'] = pandas.DatetimeIndex(histprice['Datetime'],
+                                                     tz=pytz.timezone('UTC'),
+                                                     name="Datetime")
+        result = (
+            histprice.set_index(['Symbol', 'Datetime'], verify_integrity=True)
             .rename(index=str, columns=self._column_rename)
         )
 
         self._update_log()
 
-        return histprice
+        return result
 
     def _retrieve(self, series, symbol, output, datatype='json'):
         params = {
@@ -605,9 +608,7 @@ class AlphaAdvantage(DataSource):
                 val = row[row_element_name]
                 row[row_element_name] = self._dtype_map[row_element_name](val)
 
-            row['Datetime'] = data_tz.localize(dt.strptime(date, '%Y-%m-%d'))
-            row['Datetime'] = row['Datetime'].astimezone(self._timezone)
-
+            row['Datetime'] = _to_datetime_utc(date, '%Y-%m-%d')
             row['Symbol'] = symbol
 
         ts_data = [i for i in req_result.values()]
@@ -723,8 +724,9 @@ class Barchart(DataSource):
         return symbol_quotes
 
 
-def _to_datetime_utc(datetime_str, tz=pytz.timezone('US/Eastern')):
-    r = dt.strptime(datetime_str[0:19], '%Y-%m-%dT%H:%M:%S')
+def _to_datetime_utc(datetime_str, dtformat='%Y-%m-%dT%H:%M:%S',
+                     tz=pytz.timezone('US/Eastern')):
+    r = dt.strptime(datetime_str[0:19], dtformat)
     r = tz.localize(r).astimezone(pytz.timezone('UTC'))
 
     return r
