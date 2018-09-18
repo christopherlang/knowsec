@@ -354,11 +354,12 @@ class DataSource(metaclass=ABCMeta):
     methods useful to retrieve data and get information about the data source
     itself, such as the name, api keys (if applicable), request logs, etc.
 
-    The primary way to interact with classes that inherit this metaclass is the
-    abstract method `get_data`, with parameters as needed. This method should
-    return `pandas.core.frame.DataFrame` whenever possible. Other structures
-    are allowed where when needed however. The output data structure, types,
-    and others must be explicitly described in the method's docstring
+    The primary way to interact with classes that inherit this metaclass is
+    the abstract method `get_data`, with parameters as needed. This method
+    should return `pandas.core.frame.DataFrame` whenever possible. Other
+    structures are allowed where when needed however. The output data
+    structure, types, and others must be explicitly described in the method's
+    docstring
 
     In child class make sure you `super().__init__()` before the class
     instantiates its own properties
