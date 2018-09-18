@@ -7,6 +7,7 @@ import pytz
 from bs4 import BeautifulSoup
 from abc import ABCMeta, abstractmethod
 import numpy as np
+from IPython.core.debugger import set_trace
 
 
 def get_exchange(exchange="NASDAQ"):
@@ -571,12 +572,11 @@ class AlphaAdvantage(DataSource):
         resource = self._retrieve(series=series, symbol=symbol, output=output)
 
         histprice = pandas.DataFrame.from_dict(resource['series'])
-        histprice['Datetime'] = pandas.DatetimeIndex(histprice['Datetime'],
-                                                     tz=pytz.timezone('UTC'),
-                                                     name="Datetime")
+
         result = (
             histprice.set_index(['Symbol', 'Datetime'], verify_integrity=True)
-            .rename(index=str, columns=self._column_rename)
+            .rename(columns=self._column_rename)
+            .sort_index()
         )
 
         self._update_log()
@@ -700,7 +700,7 @@ class Barchart(DataSource):
 
         quotes = (
             pandas.DataFrame.from_dict(resource)
-            .rename(index=str, columns=self._column_rename)
+            .rename(columns=self._column_rename)
             .set_index(['Symbol', 'Datetime'])
         )
 
