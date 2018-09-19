@@ -1,7 +1,7 @@
 import requests
 import re
 import json
-from datetime import datetime as dt
+import datetime as dt
 import pandas
 import pytz
 from bs4 import BeautifulSoup
@@ -12,6 +12,8 @@ import time
 
 
 STOCKSERIES_COLUMNS = ['open', 'close', 'high', 'low', 'volume']
+
+pdidx = pandas.IndexSlice
 
 
 def get_exchange(exchange="NASDAQ"):
@@ -69,7 +71,9 @@ def get_exchange(exchange="NASDAQ"):
     df_result['MarketCap'] = pandas.to_numeric(df_result['MarketCap'])
     df_result['IPOyear'] = pandas.to_numeric(df_result['IPOyear'])
     df_result['ExchangeListing'] = exchange
-    df_result['Update_dt'] = pytz.timezone('UTC').localize(dt.utcnow())
+    df_result['Update_dt'] = (
+        pytz.timezone('UTC').localize(dt.datetime.utcnow())
+    )
 
     return df_result
 
@@ -302,11 +306,17 @@ class DataSource(metaclass=ABCMeta):
     def _retrieve(self):
         pass
 
+    @abstractmethod
+    def retrieve_latest_record(self, from_dt, symbol, series):
+        pass
+
     def _update_log(self):
         """Internal method to update the `access_log` property"""
 
         self._access_log['total_requests'] += 1
-        self._access_log['last_request'] = self._timezone.localize(dt.utcnow())
+        self._access_log['last_request'] = (
+            self._timezone.localize(dt.datetime.utcnow())
+        )
 
 
 class AlphaAdvantage(DataSource):
@@ -395,6 +405,8 @@ class AlphaAdvantage(DataSource):
         ----------
         symbol : str
             The stock symbol for the time series. See property `functions`
+        series : str
+            The type and period series to retrieve
         output : str
             Either 'compact' for the last 100 records, or 'full' for 20 years
 
@@ -433,6 +445,44 @@ class AlphaAdvantage(DataSource):
         )
 
         return result
+
+    def retrieve_latest_record(self, symbol, from_dt, series='ts_stock_da'):
+        """Retrieve the latest time series data from Alpha Vantage
+
+        Parameters
+        ----------
+        symbol : str
+            Ticker symbol
+        from_dt : datetime.datetime
+            The last datetime already
+        series : str
+            The type and period series to retrieve
+
+        Returns
+        -------
+        :obj:`pandas.core.frame.DataFrame`
+            A `pandas.core.frame.DataFrame` that holds the time series data
+            from Alpha Vantage
+
+            - The data frame is always indexed on 'Symbol' and 'Datetime'
+            - 'Datetime' is stored as a :obj:`datetime.datetime` that is
+              localized to 'UTC' time
+            - The columns returned are variable, depending on the time series
+            - Can be an empty data frame if no records were found
+        """
+        if isinstance(from_dt, dt.datetime) is True:
+            initial_dt = from_dt.isoformat()
+        else:
+            errmsg = 'param: from_dt should be a {} object'
+            errmsg = errmsg.format('datetime.datetime')
+            raise TypeError(errmsg)
+
+        latest_dt = dt.datetime.utcnow().isoformat()
+
+        data = self.retrieve_data(symbol=symbol, series=series,
+                                  output='compact')
+
+        return data.loc[pdidx[:, initial_dt:latest_dt], :]
 
     def _retrieve(self, series, symbol, output, datatype='json'):
         params = {
@@ -559,13 +609,16 @@ class Barchart(DataSource):
             'tradeTimestamp': 'Datetime'
         }
 
-    def retrieve_data(self, symbol, series=None):
+    def retrieve_data(self, symbol, mode=None, series=None):
         """Retrieve time series data from Barchart.com
 
         Parameters
         ----------
         symbol : str or list of str
             The stock symbol(s) for the time series
+        mode : str or None
+            Filters quote for recency. 'r' for real-time, 'i' for delayed, or
+            'd' for end of day prices
         series : str, not yet implemented
 
         Returns
@@ -596,7 +649,38 @@ class Barchart(DataSource):
             .set_index(['Symbol', 'Datetime'])
         )
 
+        if mode is not None:
+            quotes = quotes[quotes['mode'] == mode]
+
         return quotes
+
+    def retrieve_latest_record(self, symbol, from_dt=None, mode=None,
+                               series=None):
+        """Retrieve the latest time series data from Alpha Vantage
+
+        Parameters
+        ----------
+        symbol : str
+            Ticker symbol
+        from_dt : datetime.datetime, not yet implemented
+        mode : str or None
+            Filters quote for recency. 'r' for real-time, 'i' for delayed, or
+            'd' for end of day prices
+        series : str, not yet implemented
+
+        Returns
+        -------
+        :obj:`pandas.core.frame.DataFrame`
+            A `pandas.core.frame.DataFrame` that holds the time series data
+            from Alpha Vantage
+
+            - The data frame is always indexed on 'Symbol' and 'Datetime'
+            - 'Datetime' is stored as a :obj:`datetime.datetime` that is
+              localized to 'UTC' time
+            - The columns returned are variable, depending on the time series
+            - Can be an empty data frame if no records were found
+        """
+        return self.retrieve_data(symbol=symbol, mode=mode)
 
     def _retrieve(self, endpoint, symbols):
         api_url = '/'.join([self._api_url, endpoint])
@@ -653,7 +737,7 @@ def _set_tz(dt_str, dt_format, tz_i=pytz.timezone('US/Eastern'),
     :obj:`datetime.datetime`
         A datetime object set in the timezone as specified in `dt_f`
     """
-    new_datetime = dt.strptime(dt_str[0:19], dt_format)
+    new_datetime = dt.datetime.strptime(dt_str[0:19], dt_format)
     new_datetime = tz_i.localize(new_datetime).astimezone(tz_f)
 
     if make_naive is True:
