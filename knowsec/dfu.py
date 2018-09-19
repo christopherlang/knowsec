@@ -7,7 +7,11 @@ import pytz
 from bs4 import BeautifulSoup
 from abc import ABCMeta, abstractmethod
 import numpy as np
-from IPython.core.debugger import set_trace
+import functools
+import time
+
+
+STOCKSERIES_COLUMNS = ['open', 'close', 'high', 'low', 'volume']
 
 
 def get_exchange(exchange="NASDAQ"):
@@ -184,170 +188,6 @@ def get_cpi(startyear, endyear, series=None):
     return result[0]
 
 
-class TimeSeriesData:
-    def __init__(self):
-        self._startdatetime = dt.utcnow()
-        self._sources = dict()
-        self._sources['stocks'] = 'Alpha Vantage'
-        self._source_metadata = {
-            'Alpha Vantage': {
-                'requests': 0,
-                'apikey': 'ARH5UW8CMDRTXLDM',
-                'last_request': None
-            }
-        }
-
-    @property
-    def sources(self):
-        return self._sources
-
-    def set_source(self, sourcetype, source):
-        self._sources[sourcetype] = source
-
-    @property
-    def source_metadata(self):
-        return self._source_metadata
-
-    def get_quote(self, symbols):
-        if isinstance(symbols, str):
-            symbolList = [symbols]
-        else:
-            symbolList = symbols
-
-            if len(symbolList) > 25:
-                symbolList = symbolList[0:25]
-
-        symbolList = ','.join(symbolList)
-
-        url = 'https://marketdata.websol.barchart.com/getQuote.json'
-        params = {
-            'apikey': 'edfaca2b49e5b010c2c39298a89a37ac',
-            'symbols': symbolList
-        }
-
-        req = requests.get(url, params=params)
-        symbol_quotes = req.json()['results']
-        symbol_quotes = [i for i in symbol_quotes if i['mode'] == 'd']
-
-        eastern_tz = pytz.timezone('US/Eastern')
-
-        for a_quote in symbol_quotes:
-            a_quote['Datetime'] = a_quote['tradeTimestamp'][0:19]
-            a_quote['Datetime'] = dt.strptime(a_quote['Datetime'],
-                                              '%Y-%m-%dT%H:%M:%S')
-            a_quote['Datetime'] = (
-                eastern_tz.localize(a_quote['Datetime'])
-                .astimezone(pytz.timezone('UTC'))
-            )
-
-        quotes = (
-            pandas.DataFrame.from_dict(symbol_quotes)
-            .filter(items=['symbol', 'Datetime', 'open',
-                           'high', 'low', 'close', 'volume'])
-            .rename(index=str, columns={'symbol': 'Symbol'})
-            .set_index(['Symbol', 'Datetime'])
-        )
-
-        return quotes
-
-    def get_stockprices(self, symbol, **kwargs):
-        result = None
-
-        print(kwargs)
-
-        if self._sources['stocks'] == 'Alpha Vantage':
-            result = self._stocksource_alphavantage(symbol=symbol,
-                                                    args=kwargs)
-
-        return result
-
-    def _stocksource_alphavantage(self, symbol, args):
-        functions = dict()
-        functions['daily'] = 'TIME_SERIES_DAILY'
-        functions['weekly'] = 'TIME_SERIES_WEEKLY'
-        functions['monthly'] = 'TIME_SERIES_MONTHLY'
-        functions['daily_adj'] = 'TIME_SERIES_DAILY_ADJUSTED'
-        functions['weekly_adj'] = 'TIME_SERIES_WEEKLY_ADJUSTED'
-        functions['monthly_adj'] = 'TIME_SERIES_MONTHLY_ADJUSTED'
-
-        url = 'https://www.alphavantage.co/query'
-
-        try:
-            fun = args['fun']
-        except KeyError:
-            fun = 'daily'
-
-        try:
-            output = args['output']
-        except KeyError:
-            output = 'compact'
-
-        params = {
-            'function': functions[fun],
-            'symbol': symbol,
-            'apikey': 'ARH5UW8CMDRTXLDM',
-            'outputsize': output
-        }
-
-        req = requests.get(url, params=params)
-        self._source_metadata['Alpha Vantage']['requests'] += 1
-        self._source_metadata['Alpha Vantage']['last_request'] = (
-            pytz.timezone('UTC').localize(dt.utcnow())
-        )
-
-        # Get time zone
-        data_tz = req.json()['Meta Data'].keys()
-        data_tz = [i for i in data_tz if i.lower().find('time zone') != -1][0]
-        data_tz = req.json()['Meta Data'][data_tz]
-        data_tz = pytz.timezone(data_tz)
-
-        json_head = req.json().keys()
-        ts_key = [i for i in json_head if i.lower().find('time series') != -1]
-        ts_key = ts_key[0]
-
-        ts_data = req.json()[ts_key]
-
-        colheaders = [list(i.keys()) for i in ts_data.values()]
-        colheaders = [item for sublist in colheaders for item in sublist]
-        colheaders = list(set(colheaders))
-        colheaders.sort()
-        colrenames = {k: re.sub('\d[.]\s', '', k) for k in colheaders}
-
-        for date, row in ts_data.items():
-            for row_element_name in row:
-                if row_element_name.find('volume') != -1:
-                    row[row_element_name] = int(row[row_element_name])
-                else:
-                    row[row_element_name] = float(row[row_element_name])
-
-            row['Datetime'] = data_tz.localize(dt.strptime(date, '%Y-%m-%d'))
-            row['Datetime'] = row['Datetime'].astimezone(pytz.timezone('UTC'))
-
-            row['Symbol'] = symbol
-
-        ts_data = [i for i in ts_data.values()]
-
-        histprice = (
-            pandas.DataFrame.from_dict(ts_data)
-            .set_index(['Symbol', 'Datetime'])
-            .rename(index=str, columns=colrenames)
-        )
-
-        return histprice
-
-    def _request_metadata(self, req):
-        req_metadata = dict()
-        req_metadata['encoding'] = req.apparent_encoding
-        req_metadata['headers'] = req.headers
-        req_metadata['is_redirect'] = req.is_redirect
-        req_metadata['request_reason'] = req.reason
-        req_metadata['status_code'] = req.status_code
-        req_metadata['url'] = req.url
-        req_metadata['api_meta'] = req.json()['Meta Data']
-
-        return req_metadata
-
-
 class DataSource(metaclass=ABCMeta):
     """Parent class defining a standardized data source API
 
@@ -393,6 +233,7 @@ class DataSource(metaclass=ABCMeta):
     access_type
     access_log
     timezone
+    req_object
     """
 
     def __init__(self, timezone='UTC'):
@@ -407,6 +248,7 @@ class DataSource(metaclass=ABCMeta):
         }
         # self._access_transactions = list()
         self._timezone = pytz.timezone(timezone)
+        self._req_object = None
 
     @property
     def source_name(self):
@@ -447,6 +289,18 @@ class DataSource(metaclass=ABCMeta):
     @property
     def timezone(self):
         return self._timezone
+
+    @property
+    def req_object(self):
+        return self._req_object
+
+    @abstractmethod
+    def retrieve_data(self, symbol, series):
+        pass
+
+    @abstractmethod
+    def _retrieve(self):
+        pass
 
     def _update_log(self):
         """Internal method to update the `access_log` property"""
@@ -534,8 +388,7 @@ class AlphaAdvantage(DataSource):
         """dict: Contains available series and their function mapping"""
         return self._series
 
-    def retrieve_stock_series(self, symbol, series='ts_stock_da',
-                              output='compact'):
+    def retrieve_data(self, symbol, series='ts_stock_da', output='compact'):
         """Retrieve time series data from Alpha Vantage
 
         Parameters
@@ -579,8 +432,6 @@ class AlphaAdvantage(DataSource):
             .sort_index()
         )
 
-        self._update_log()
-
         return result
 
     def _retrieve(self, series, symbol, output, datatype='json'):
@@ -592,27 +443,46 @@ class AlphaAdvantage(DataSource):
             'datatype': datatype
         }
 
-        req = requests.get(self._api_url, params=params)
+        self._req_object = requests.get(self._api_url, params=params)
 
-        req_metadata = req.json()['Meta Data']
+        while True:
+            try:
+                req_metadata = self._req_object.json()['Meta Data']
+                break
+
+            except KeyError:
+                # Probably rate limit exceeded
+                # Request comes back with status 200, but provides a simple
+                # text read out
+                print('Rate limit probably exceeded. Waiting 62 seconds')
+                time.sleep(62)  # wait 1 minute, 2 seconds
+
+        ts_key = [i for i in req_metadata.keys()
+                  if re.search('time zone', i, re.I) is not None]
 
         # Get time zone
-        data_tz = pytz.timezone(req_metadata['5. Time Zone'])
+        if ts_key:
+            data_tz = pytz.timezone(req_metadata[ts_key[0]])
+        else:
+            data_tz = pytz.timezone('US/Eastern')
 
         # Extract the time series stock prices
-        ts_key = [i for i in req.json().keys() if i != 'Meta Data'][0]
+        ts_key = [i for i in self._req_object.json().keys()
+                  if i != 'Meta Data'][0]
 
-        req_result = req.json()[ts_key]
+        req_result = self._req_object.json()[ts_key]
 
         for date, row in req_result.items():
             for row_element_name in row:
                 val = row[row_element_name]
                 row[row_element_name] = self._dtype_map[row_element_name](val)
 
-            row['Datetime'] = _to_datetime_utc(date, '%Y-%m-%d')
+            row['Datetime'] = _set_tz(date, '%Y-%m-%d', tz_f=self._timezone)
             row['Symbol'] = symbol
 
         ts_data = [i for i in req_result.values()]
+
+        self._update_log()
 
         result = {
             'meta_data': req_metadata,
@@ -647,6 +517,8 @@ class Barchart(DataSource):
     """
 
     def __init__(self, timezone='UTC'):
+        super().__init__(timezone)
+
         self._source_name = 'barchart'
         self._valid_name = 'barchart'
         self._access_key = 'edfaca2b49e5b010c2c39298a89a37ac'
@@ -659,11 +531,13 @@ class Barchart(DataSource):
         # self._access_transactions = list()
         self._timezone = pytz.timezone(timezone)
 
+        fmt_set_tz = functools.partial(_set_tz, dt_format='%Y-%m-%dT%H:%M:%S')
+
         self._dtype_map = {
             'symbol': str,
             'name': str,
             'exchange': str,
-            'tradeTimestamp': _to_datetime_utc,
+            'tradeTimestamp': fmt_set_tz,
             'open': np.float64,
             'low': np.float64,
             'high': np.float64,
@@ -676,8 +550,8 @@ class Barchart(DataSource):
             'dayCode': str,
             'flag': str,
             'unitCode': str,
-            'serverTimestamp': _to_datetime_utc,
-            'tradeTimestamp': _to_datetime_utc
+            'serverTimestamp': fmt_set_tz,
+            'tradeTimestamp': fmt_set_tz
         }
 
         self._column_rename = {
@@ -685,18 +559,36 @@ class Barchart(DataSource):
             'tradeTimestamp': 'Datetime'
         }
 
-    def retrieve_securities_quote(self, symbols):
-        if isinstance(symbols, str):
-            symbolList = [symbols]
+    def retrieve_data(self, symbol, series=None):
+        """Retrieve time series data from Barchart.com
+
+        Parameters
+        ----------
+        symbol : str or list of str
+            The stock symbol(s) for the time series
+        series : str, not yet implemented
+
+        Returns
+        -------
+        :obj:`pandas.core.frame.DataFrame`
+            A `pandas.core.frame.DataFrame` that holds the time series data
+            from Barchart.com
+
+            - The data frame is always indexed on 'Symbol' and 'Datetime'
+            - 'Datetime' is stored as a :obj:`datetime.datetime` that is
+              localized to 'UTC' time
+            - The columns returned are variable, depending on the time series
+        """
+
+        if isinstance(symbol, str):
+            symbol_list = [symbol]
         else:
-            symbolList = symbols
+            if len(symbol) > 25:
+                raise TooManySymbolsError('Max number of symbols is 25')
 
-            if len(symbolList) > 25:
-                symbolList = symbolList[0:25]
+            symbol_list = symbol
 
-        symbolList = ','.join(symbolList)
-
-        resource = self._retrieve('getQuote.json', symbolList)
+        resource = self._retrieve('getQuote.json', ','.join(symbol_list))
 
         quotes = (
             pandas.DataFrame.from_dict(resource)
@@ -714,20 +606,44 @@ class Barchart(DataSource):
             'symbols': symbols
         }
 
-        req = requests.get(api_url, params=params)
+        self._req_object = requests.get(api_url, params=params)
 
-        symbol_quotes = req.json()['results']
+        symbol_quotes = self._req_object.json()['results']
 
         for a_quote in symbol_quotes:
             for colname in a_quote:
                 a_quote[colname] = self._dtype_map[colname](a_quote[colname])
 
+        self._update_log()
+
         return symbol_quotes
 
 
-def _to_datetime_utc(datetime_str, dtformat='%Y-%m-%dT%H:%M:%S',
-                     tz=pytz.timezone('US/Eastern')):
-    r = dt.strptime(datetime_str[0:19], dtformat)
-    r = tz.localize(r).astimezone(pytz.timezone('UTC'))
+def _set_tz(dt_str, dt_format, tz_i=pytz.timezone('US/Eastern'),
+            tz_f=pytz.timezone('UTC')):
+    new_datetime = dt.strptime(dt_str[0:19], dt_format)
+    new_datetime = tz_i.localize(new_datetime).astimezone(tz_f)
 
-    return r
+    return new_datetime
+
+
+def standardize_stock_series(dataframe):
+    return dataframe[STOCKSERIES_COLUMNS]
+
+
+class Error(Exception):
+    """Base class for exceptions in this module."""
+    pass
+
+
+class TooManySymbolsError(Error):
+    """Exception raised for when too many symbols are requested
+
+    Attributes:
+        expression -- input expression in which the error occurred
+        message -- explanation of the error
+    """
+
+    def __init__(self, expression, message):
+        self.expression = expression
+        self.message = message
