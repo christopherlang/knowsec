@@ -620,9 +620,44 @@ class Barchart(DataSource):
 
 
 def _set_tz(dt_str, dt_format, tz_i=pytz.timezone('US/Eastern'),
-            tz_f=pytz.timezone('UTC')):
+            tz_f=pytz.timezone('UTC'), make_naive=True):
+    """Convert a datetime string into native Python Datetime object
+
+    The datetime string does not have to have time in it. However, the
+    :obj:`datetime.datetime` returned will have time. It is assumed in this
+    case that the time is 00:00:00 in the native timezone, defined by the
+    `tz_i` parameter
+
+    Previously, when attempting to save the datetime objects, I'd get a:
+        ValueError: Cannot cast DatetimeIndex to dtype datetime64[us]
+
+    Ensuring the datetime object is naive fixes this
+
+
+    Parameters
+    ----------
+    dt_str : str
+        The datetime string to convert
+    dt_format : str
+        The format the datetime string takes. Same as `datetime.datetime`
+    tz_i : pytz.timezone
+        States what timezone the datetime string is referring to
+    tz_f : pytz.timezone
+        States the output `datetime.datetime` object should be in
+    make_naive : bool
+        Should timezone information be stripped from the output
+        `datetime.datetime` object
+
+    Returns
+    -------
+    :obj:`datetime.datetime`
+        A datetime object set in the timezone as specified in `dt_f`
+    """
     new_datetime = dt.strptime(dt_str[0:19], dt_format)
     new_datetime = tz_i.localize(new_datetime).astimezone(tz_f)
+
+    if make_naive is True:
+        new_datetime = new_datetime.replace(tzinfo=None)
 
     return new_datetime
 
