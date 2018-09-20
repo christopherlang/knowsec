@@ -175,9 +175,21 @@ class Company(SQLBASE):
 class EODPrices(SQLBASE):
     __tablename__ = 'eod_stockprices'
     Symbol = Column(String, primary_key=True)
-    Datetime = Column(DateTime(timezone=True), primary_key=True)
+    Datetime = Column(DateTime, primary_key=True)
     open = Column(BigInteger)
     high = Column(BigInteger)
     low = Column(BigInteger)
     close = Column(BigInteger)
     volume = Column(BigInteger)
+
+
+class UpdateLog(SQLBASE):
+    __tablename__ = 'update_log'
+    Datetime = Column(DateTime, primary_key=True)
+    Source = Column(String, primary_key=True)
+    Table = Column(String, primary_key=True)
+    UpdateType = Column(String, primary_key=True)
+    num_new_records = Column(Integer)
+    num_deleted_records = Column(Integer)
+    num_updated_records = Column(Integer)
+    relevant_datetime = Column(DateTime)
