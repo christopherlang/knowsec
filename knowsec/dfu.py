@@ -13,7 +13,7 @@ import time
 
 STOCKSERIES_COLUMNS = ['open', 'close', 'high', 'low', 'volume']
 
-pdidx = pandas.IndexSlice
+PDIDX = pandas.IndexSlice
 
 
 def get_exchange(exchange="NASDAQ"):
@@ -150,22 +150,18 @@ def get_cpi(startyear, endyear, series=None):
                   'APU000070111', 'LIUR0000SL00019']
 
     headers = {'Content-type': 'application/json'}
-    payload = {
-        "seriesid": series,
-        "startyear": startyear,
-        "endyear": endyear
-    }
-    payload = json.dumps(payload)
+    payload = json.dumps({"seriesid": series, "startyear": startyear,
+                          "endyear": endyear})
 
-    p = requests.post('https://api.bls.gov/publicAPI/v2/timeseries/data/',
-                      data=payload,
-                      headers=headers)
+    req = requests.post('https://api.bls.gov/publicAPI/v2/timeseries/data/',
+                        data=payload,
+                        headers=headers)
 
-    json_data = json.loads(p.text)
+    json_data = json.loads(req.text)
 
     result = list()
     for series in json_data['Results']['series']:
-        seriesId = series['seriesID']
+        series_id = series['seriesID']
 
         if series['data']:
             for row in series['data']:
@@ -179,7 +175,7 @@ def get_cpi(startyear, endyear, series=None):
             dfr = dfr.drop(['period', 'monthn'], axis=1)
             dfr = dfr.rename(index=str, columns={'periodName': 'MonthName'})
             dfr['value'] = dfr['value'].astype('float')
-            dfr['SeriesID'] = seriesId
+            dfr['SeriesID'] = series_id
 
             result.append(dfr)
 
@@ -234,7 +230,6 @@ class DataSource(metaclass=ABCMeta):
     valid_name
     access_key
     api_url
-    access_type
     access_log
     timezone
     req_object
@@ -244,13 +239,11 @@ class DataSource(metaclass=ABCMeta):
         self._source_name = 'Source Name'
         self._valid_name = 'SourceName'
         self._access_key = '<apikey>'
-        self._access_type = 'REST'
         self._api_url = 'https://apiurl.com/'
         self._access_log = {
             'total_requests': 0,
             'last_request': None
         }
-        # self._access_transactions = list()
         self._timezone = pytz.timezone(timezone)
         self._req_object = None
 
@@ -271,12 +264,6 @@ class DataSource(metaclass=ABCMeta):
         """str or None: The API key used to access the web API"""
 
         return self._access_key
-
-    @property
-    def access_type(self):
-        """str: The type of the data source e.g. REST, python client, etc."""
-
-        return self._access_type
 
     @property
     def api_url(self):
@@ -337,7 +324,6 @@ class AlphaAdvantage(DataSource):
     valid_name
     access_key
     api_url
-    access_type
     access_log
     series
     timezone
@@ -350,7 +336,6 @@ class AlphaAdvantage(DataSource):
         self._valid_name = 'AlphaVantage'
         self._access_key = 'ARH5UW8CMDRTXLDM'
         self._api_url = 'https://www.alphavantage.co/query'
-        self._access_type = 'REST'
         self._access_log = {
             'total_requests': 0,
             'last_request': None
@@ -454,7 +439,7 @@ class AlphaAdvantage(DataSource):
         symbol : str
             Ticker symbol
         from_dt : datetime.datetime
-            The last datetime already
+            The datetime to filter from. Inclusive
         series : str
             The type and period series to retrieve
 
@@ -482,7 +467,7 @@ class AlphaAdvantage(DataSource):
         data = self.retrieve_data(symbol=symbol, series=series,
                                   output='compact')
 
-        return data.loc[pdidx[:, initial_dt:latest_dt], :]
+        return data.loc[PDIDX[:, initial_dt:latest_dt], :]
 
     def _retrieve(self, series, symbol, output, datatype='json'):
         params = {
