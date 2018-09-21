@@ -748,6 +748,5 @@ class TooManySymbolsError(Error):
         message -- explanation of the error
     """
 
-    def __init__(self, expression, message):
-        self.expression = expression
+    def __init__(self, message):
         self.message = message
