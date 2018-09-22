@@ -294,7 +294,7 @@ class DataSource(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def retrieve_latest_record(self, from_dt, symbol, series):
+    def retrieve_latest(self, from_dt, symbol, series):
         pass
 
     def _update_log(self):
@@ -306,7 +306,7 @@ class DataSource(metaclass=ABCMeta):
         )
 
 
-class AlphaAdvantage(DataSource):
+class AlphaVantage(DataSource):
     """Access stock data from Alpha Vantage
 
     Alpha Vantage offers free stock data through a web API. Class currently
@@ -332,7 +332,7 @@ class AlphaAdvantage(DataSource):
     def __init__(self, timezone='UTC'):
         super().__init__(timezone)
 
-        self._source_name = 'Alpha Advantage'
+        self._source_name = 'Alpha Vantage'
         self._valid_name = 'AlphaVantage'
         self._access_key = 'ARH5UW8CMDRTXLDM'
         self._api_url = 'https://www.alphavantage.co/query'
@@ -431,7 +431,7 @@ class AlphaAdvantage(DataSource):
 
         return result
 
-    def retrieve_latest_record(self, symbol, from_dt, series='ts_stock_da'):
+    def retrieve_latest(self, symbol, from_dt, series='ts_stock_da'):
         """Retrieve the latest time series data from Alpha Vantage
 
         Parameters
@@ -639,8 +639,7 @@ class Barchart(DataSource):
 
         return quotes
 
-    def retrieve_latest_record(self, symbol, from_dt=None, mode=None,
-                               series=None):
+    def retrieve_latest(self, symbol, from_dt=None, mode=None, series=None):
         """Retrieve the latest time series data from Alpha Vantage
 
         Parameters
