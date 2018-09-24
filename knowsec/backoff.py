@@ -86,7 +86,7 @@ def exponential_backoff(max_backoff, verbose=True):
 
 
 def linear_backoff(max_backoff, initial_wait=1, step=1, verbose=True):
-    """Backoff a call exponentially
+    """Backoff a call linearly
 
     Returns a function that when called, will execute `time.sleep` to stop
     the line of execution
