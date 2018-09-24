@@ -1,6 +1,5 @@
 import time
 import random
-import datetime as dt
 
 
 def exponential_backoff(max_backoff, verbose=True):
