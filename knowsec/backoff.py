@@ -16,6 +16,19 @@ def exponential_backoff(max_backoff, verbose=True):
             Where 'random milliseconds' is a value less than or equal to 1000
             Where 'maximum backoff' is the user set maximum backoff time
 
+    >>> bckoff = exponential_backoff(32)  # max wait time set to 32 seconds
+    >>> bckoff()
+    Sleeping for 1.43 seconds
+    {'ntries': 1, 'wait_time': 1.426}
+    >>> bckoff()
+    Sleeping for 2.75 seconds
+    {'ntries': 2, 'wait_time': 2.75}
+    >>> bckoff(False)
+    {'ntries': 0, 'wait_time': 0}
+    >>> bckoff()
+    Sleeping for 1.01 seconds
+    {'ntries': 1, 'wait_time': 1.01}
+
     Parameters
     ----------
     max_backoff : int or float
@@ -80,10 +93,25 @@ def linear_backoff(max_backoff, initial_wait=1, step=1, verbose=True):
 
     Time spent sleeping follows a constant, step-wise increase:
 
-    wait time = min(initial_wait + (n * step), maximum backoff)
-        Where 'n' is the number of retries
-        Where 'step' is the linear increase of time, in seconds
-        Where 'maximum backoff' is the user set maximum backoff time
+        wait time = min(initial_wait + (n * step), maximum backoff)
+            Where 'n' is the number of retries
+            Where 'step' is the linear increase of time, in seconds
+            Where 'maximum backoff' is the user set maximum backoff time
+
+    >>> bckoff = linear_backoff(32)  # max wait time set to 32 seconds
+    >>> bckoff()
+    Sleeping for 1.00 seconds
+    {'ntries': 1, 'wait_time': 1}
+    >>> bckoff()
+    Sleeping for 2.00 seconds
+    {'ntries': 2, 'wait_time': 2}
+    >>> bckoff = linear_backoff(32, step=3)  # Increment wait time by 3 seconds
+    >>> bckoff()
+    Sleeping for 1.00 seconds
+    {'ntries': 1, 'wait_time': 1}
+    >>> bckoff()
+    Sleeping for 4.00 seconds
+    {'ntries': 2, 'wait_time': 4}
 
     Parameters
     ----------
@@ -153,6 +181,14 @@ def constant_backoff(backoff, verbose=True):
 
     The time spent sleeping is always the same
 
+    >>> bckoff = constant_backoff(2)  # Wait for 2 seconds per call
+    >>> bckoff()
+    Sleeping for 2.00 seconds
+    {'ntries': 1, 'wait_time': 2}
+    >>> bckoff()
+    Sleeping for 2.00 seconds
+    {'ntries': 2, 'wait_time': 2}
+
     Parameters
     ----------
     backoff : int or float
@@ -206,3 +242,10 @@ def constant_backoff(backoff, verbose=True):
         return {'ntries': backoff_ntries, 'wait_time': wait_time}
 
     return backoff_fun
+
+
+if __name__ == "__main__":
+    import doctest
+    random.seed(12345)
+
+    doctest.testmod()
