@@ -351,15 +351,15 @@ class AlphaVantage(DataSource):
         }
 
         self._dtype_map = {
-            '1. open': np.float64,
-            '2. high': np.float64,
-            '3. low': np.float64,
-            '4. close': np.float64,
-            '5. volume': np.int64,
-            '6. volume': np.int64,
-            '5. adjusted close': np.float64,
-            '7. dividend amount': np.float64,
-            '8. split coefficient': np.float64
+            '1. open': (np.int64, decimal.Decimal, FIFACTOR),
+            '2. high': (np.int64, decimal.Decimal, FIFACTOR),
+            '3. low': (np.int64, decimal.Decimal, FIFACTOR),
+            '4. close': (np.int64, decimal.Decimal, FIFACTOR),
+            '5. volume': (np.int64, None, None),
+            '6. volume': (np.int64, None, None),
+            '5. adjusted close': (np.int64, decimal.Decimal, FIFACTOR),
+            '7. dividend amount': (np.int64, decimal.Decimal, FIFACTOR),
+            '8. split coefficient': (np.int64, decimal.Decimal, FIFACTOR)
         }
 
         self._column_rename = {
@@ -510,7 +510,14 @@ class AlphaVantage(DataSource):
         for date, row in req_result.items():
             for row_element_name in row:
                 val = row[row_element_name]
-                row[row_element_name] = self._dtype_map[row_element_name](val)
+                dtype_map = self._dtype_map[row_element_name]
+
+                if dtype_map[1] is None:
+                    row[row_element_name] = dtype_map[0](val)
+
+                else:
+                    val = dtype_map[0](dtype_map[1](val) * dtype_map[2])
+                    row[row_element_name] = val
 
             row['Datetime'] = _set_tz(date, '%Y-%m-%d', tz_f=self._timezone)
             row['Symbol'] = symbol
