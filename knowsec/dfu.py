@@ -17,70 +17,51 @@ PDIDX = pandas.IndexSlice
 
 FIFACTOR = 10000
 
+LISTING = ['NYSE', 'AMEX', 'NASDAQ', 'ETF']
 
-def get_exchange(exchange="NASDAQ"):
-    """ Stock symbols from NASDAQ
+
+def download_symbols(exchange):
+    """Security symbols sourced from NASDAQ
 
     Downloads, parses, and returns a Pandas DataFrame containing stock symbols
-    for the NASDAQ, NYSE, and AMEX exchanges
+    for the NASDAQ, NYSE, and AMEX exchanges, as well as ETFs
 
-    Arguements:
+    Parameters
+    ----------
         exchange : str
-            The exchange name. Can be one of 'NASDAQ', 'NYSE', or 'AMEX'
+            The exchange name. Can be one of 'NASDAQ', 'NYSE', 'AMEX', or 'ETF'
 
-    Returns:
-        a pandas.DataFrame object
+    Returns
+    -------
+    :obj:`pandas.core.frame.DataFrame`
+        The data frame object is multi-indexed on 'Symbol' and 'Listing', and
+        has only one column: 'Name'
     """
-    url = "https://www.nasdaq.com/screening/companies-by-industry.aspx"
-    payload = {'render': 'download'}
 
-    if exchange == 'NASDAQ':
-        payload['exchange'] = 'NASDAQ'
-    elif exchange == 'NYSE':
-        payload['exchange'] = 'NYSE'
-    elif exchange == 'AMEX':
-        payload['exchange'] = 'AMEX'
+    if exchange not in LISTING:
+        allowed_ex = ["'" + i + "'" for i in LISTING]
+        allowed_ex = ", ".join(allowed_ex)
+        raise ValueError(f'param: exchange must be one of {allowed_ex}')
+
+    if exchange == 'ETF':
+        url = "https://www.nasdaq.com/investing/etfs/etf-finder-results.aspx"
+        url += "?download=yes"
     else:
-        raise ValueError("exchange parameter must be one of 'NASDAQ', "
-                         "'NYSE', or 'AMEX'")
+        url = "https://www.nasdaq.com/screening/companies-by-industry.aspx"
+        url += f"?render=download&exchange={exchange}"
 
-    symbols = requests.get(url, params=payload)
+    result = pandas.read_csv(url, delimiter=",", header=0, encoding='ascii')
+    result['Symbol'] = result['Symbol'].apply(lambda x: x.strip())
+    result['Name'] = result['Name'].apply(lambda x: x.strip())
+    result['Name'] = result['Name'].apply(lambda x: x.replace('&#39;', '’'))
+    result['update_dt'] = dt.datetime.utcnow()
 
-    symbols = symbols.text.split('\r\n')
-    symbols = [re.sub(',$', '', i) for i in symbols]
-    symbols = [re.split('["],["]', i) for i in symbols]
+    result.insert(1, 'Listing', exchange)
+    result = result.set_index(['Symbol', 'Listing'])
 
-    for row in symbols:
-        for i in range(len(row)):
-            row[i] = row[i].replace('"', '')
+    result = result[['Name', 'update_dt']]
 
-            if row[i] == 'n/a':
-                row[i] = None
-
-    headers = symbols[0]
-    symbols.pop(0)
-
-    df_result = pandas.DataFrame(symbols, columns=headers)
-
-    renamed_columns = {
-        'ADR TSO': 'ADR_TSO',
-        'Summary Quote': 'Summary_Quote'
-    }
-
-    df_result = df_result.rename(index=str, columns=renamed_columns)
-
-    df_result['LastSale'] = pandas.to_numeric(df_result['LastSale'])
-    df_result['MarketCap'] = pandas.to_numeric(df_result['MarketCap'])
-    df_result['IPOyear'] = pandas.to_numeric(df_result['IPOyear'])
-    df_result['ExchangeListing'] = exchange
-    df_result['Update_dt'] = (
-        pytz.timezone('UTC').localize(dt.datetime.utcnow())
-    )
-
-    df_result['Symbol'] = df_result['Symbol'].apply(lambda x: x.strip())
-    df_result = df_result.set_index(['Symbol', 'ExchangeListing'])
-
-    return df_result
+    return result
 
 
 def get_sp500():
