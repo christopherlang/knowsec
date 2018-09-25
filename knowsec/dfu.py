@@ -8,11 +8,14 @@ from bs4 import BeautifulSoup
 from abc import ABCMeta, abstractmethod
 import numpy as np
 import functools
+import decimal
 
 
 STOCKSERIES_COLUMNS = ['open', 'close', 'high', 'low', 'volume']
 
 PDIDX = pandas.IndexSlice
+
+FIFACTOR = 10000
 
 
 def get_exchange(exchange="NASDAQ"):
