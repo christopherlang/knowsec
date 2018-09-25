@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, Integer, String, DateTime, BigInteger
+from sqlalchemy import Column, Float, Integer, String, DateTime, BigInteger
 from sqlalchemy.orm import sessionmaker
 import pandas as pd
 import datetime as dt
@@ -220,11 +220,11 @@ class StockDB:
         record: dict or pandas DataFrame
         """
 
-        if isinstance(record, dict):
+        if isinstance(record, dict) is True:
             table = self.table_map(tablename)
             self._dbsession.execute(table.insert(values=record))
 
-        if isinstance(record, pd.core.frame.DataFrame):
+        elif isinstance(record, pd.core.frame.DataFrame) is True:
             record.to_sql(tablename, self._dbengine, if_exists='append',
                           index=True)
 
@@ -266,6 +266,12 @@ class StockDB:
                 symbol = [symbol]
 
             df_com = df_com[df_com['Symbol'].isin(symbol)]
+
+        return df_com
+
+    def retrieve_security_log(self):
+        df_com = pd.read_sql('eod_stockprices_update_log', self._dbengine)
+        df_com = df_com.set_index('Symbol')
 
         return df_com
 
@@ -325,6 +331,14 @@ class EODPrices(SQLBASE):
     low = Column(BigInteger)
     close = Column(BigInteger)
     volume = Column(BigInteger)
+
+
+class EODPrices_log(SQLBASE):
+    __tablename__ = 'eod_stockprices_update_log'
+    Symbol = Column(String, primary_key=True)
+    minimum_datetime = Column(DateTime)
+    maximum_datetime = Column(DateTime)
+    update_dt = Column(DateTime)
 
 
 class UpdateLog(SQLBASE):
