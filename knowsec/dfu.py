@@ -8,7 +8,6 @@ from bs4 import BeautifulSoup
 from abc import ABCMeta, abstractmethod
 import numpy as np
 import functools
-import time
 
 
 STOCKSERIES_COLUMNS = ['open', 'close', 'high', 'low', 'volume']
@@ -74,6 +73,9 @@ def get_exchange(exchange="NASDAQ"):
     df_result['Update_dt'] = (
         pytz.timezone('UTC').localize(dt.datetime.utcnow())
     )
+
+    df_result['Symbol'] = df_result['Symbol'].apply(lambda x: x.strip())
+    df_result = df_result.set_index(['Symbol', 'ExchangeListing'])
 
     return df_result
 
@@ -480,17 +482,33 @@ class AlphaVantage(DataSource):
 
         self._req_object = requests.get(self._api_url, params=params)
 
-        while True:
-            try:
-                req_metadata = self._req_object.json()['Meta Data']
-                break
+        if self._req_object.ok is not True:
+            raise self._req_object.raise_for_status()
 
-            except KeyError:
-                # Probably rate limit exceeded
-                # Request comes back with status 200, but provides a simple
-                # text read out
-                print('Rate limit probably exceeded. Waiting 62 seconds')
-                time.sleep(62)  # wait 1 minute, 2 seconds
+        while True:
+            if len(self._req_object.json().keys()) < 2:
+                req_key = list(self._req_object.json().keys())[0]
+
+                if req_key == 'Error Message':
+                    # TODO log the message. Might be invalid API call
+                    msg = self._req_object.json()[req_key]
+
+                    if msg.lower().find('invalid api call') != -1:
+                        raise InvalidCallError(msg)
+
+                elif req_key == 'Information':
+                    msg = self._req_object.json()[req_key]
+
+                    if msg.lower().find('higher api call') != -1:
+                        raise RateLimitError('Rate limit exceeded')
+
+                else:
+                    raise GeneralCallError("Unknown issue, with no solution")
+
+            else:
+                req_metadata = self._req_object.json()['Meta Data']
+
+                break
 
         ts_key = [i for i in req_metadata.keys()
                   if re.search('time zone', i, re.I) is not None]
@@ -743,9 +761,45 @@ class TooManySymbolsError(Error):
     """Exception raised for when too many symbols are requested
 
     Attributes:
-        expression -- input expression in which the error occurred
         message -- explanation of the error
     """
 
     def __init__(self, message):
+        super().__init__()
+        self.message = message
+
+
+class InvalidCallError(Error):
+    """Exception raised for when an API call has hit rate limits
+
+    Attributes:
+        message -- explanation of the error
+    """
+
+    def __init__(self, message):
+        super().__init__()
+        self.message = message
+
+
+class GeneralCallError(Error):
+    """Exception raised for a general error, with undefined solution
+
+    Attributes:
+        message -- explanation of the error
+    """
+
+    def __init__(self, message):
+        super().__init__()
+        self.message = message
+
+
+class RateLimitError(Error):
+    """Exception raised for a general error, with undefined solution
+
+    Attributes:
+        message -- explanation of the error
+    """
+
+    def __init__(self, message):
+        super().__init__()
         self.message = message
