@@ -59,7 +59,7 @@ def download_symbols(exchange):
     result.insert(1, 'Listing', exchange)
     result = result.set_index(['Symbol', 'Listing'])
 
-    result = result[['Name', 'update_dt']]
+    result = result[['Name', 'update_dt']].rename(columns={'Name': 'name'})
 
     return result
 
