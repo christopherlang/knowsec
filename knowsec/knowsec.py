@@ -1,5 +1,4 @@
-import os
-# import sys
+import sys
 import backoff
 import yaml
 import dfu
@@ -7,103 +6,140 @@ import database
 import tqdm
 import pandas
 import datetime as dt
+import functools
 
 
 CONFIG = dict()
 with open('../config/data_config.yaml', 'r') as f:
     CONFIG['data'] = yaml.load(f)
 
-db = database.StockDB('../db/storage.db')
+DBASE = database.StockDB('../db/storage4.db')
+DSOURCE = dfu.AlphaVantage()
 
-try:
-    db.delete_table('eod_stockprices')
 
-except database.NoTableError:
-    pass
+def main():
+    DBASE.create_all_tables()
 
-db.create_all_tables()
+    # Perform company table update
+    comp_table = update_securities_table()
 
-# Perform company table update
-comp_table = list()
-for exchange in ['NYSE', 'NASDAQ', 'AMEX']:
-    comp_table.append(dfu.get_exchange(exchange))
+    stock_update_log = DBASE.retrieve_security_log()
+    pdidx = pandas.IndexSlice
 
-comp_table = comp_table[0].append(comp_table[1]).append(comp_table[2])
+    symbol_list = set([i[0] for i in comp_table.index.get_values()])
+    symbol_list = [i for i in symbol_list if i != '']
 
-db.update_company(comp_table)
-
-ds = dfu.AlphaVantage()
-
-stock_update_log = db.retrieve_security_log()
-pdidx = pandas.IndexSlice
-
-symbol_list = set([i[0] for i in comp_table.index.get_values()])
-symbol_list = [i for i in symbol_list if i != '']
-
-records_update = list()
-
-backoff_fun = backoff.exponential_backoff(120, False)  # max wait is 2 minutes
-pbar = tqdm.tqdm(symbol_list, ncols=100)
-for sym in pbar:
-    sym_in_log = False
-
-    try:
-        sym_update_log = stock_update_log.loc[[pdidx[sym]], :]
-        sym_in_log = True
-
-    except KeyError:
-        sym_update_log = None
-
-    from_dt = None
-    if sym_update_log is None:
-        output_type = 'full'
-
-    else:
+    backoff_fun = backoff.exponential_backoff(120, False)
+    pbar = tqdm.tqdm(symbol_list, ncols=100)
+    for sym in pbar:
+        # Determine first if it needs a full update, or partial update
+        # Done through the 'stock_update_log'
+        # If symbol does not exist, or if 'stock_update_log' is None,
+        # do full update. Otherwise, partial
         try:
-            from_dt = sym_update_log.loc[pdidx[sym], 'maximum_datetime']
-            from_dt = from_dt.tolist()[0] + dt.timedelta(days=1)
+            sym_update_log = stock_update_log.loc[[pdidx[sym]], :]
+            sym_in_log = True
 
         except KeyError:
-            output_type = 'full'
+            sym_update_log = None
+            sym_in_log = False
 
-    while True:
-        series = None
+        perform_full = sym_in_log is not True or len(stock_update_log) == 0
 
-        try:
-            if from_dt is None or output_type == 'full':
-                series = ds.retrieve_data(sym, output='full')
+        if perform_full is True:
+            update_log = False
+
+            get_data = functools.partial(DSOURCE.retrieve_data, output='full')
+
+        else:
+            update_log = True
+
+            from_dt = sym_update_log.loc[pdidx[sym], 'maximum_datetime']
+            from_dt = from_dt.to_pydatetime() + dt.timedelta(days=1)
+
+            if from_dt < dt.datetime.utcnow():
+                get_data = functools.partial(DSOURCE.retrieve_latest,
+                                             from_dt=from_dt)
 
             else:
-                series = ds.retrieve_latest(sym, from_dt)
+                continue
 
-            backoff_fun(False)
-            break
+        series = None
+        break_
+        while True:
+            try:
+                series = get_data(sym)
+                backoff_fun(False)
+                break
 
-        except (dfu.InvalidCallError, dfu.GeneralCallError):
-            break
+            except (dfu.InvalidCallError, dfu.GeneralCallError):
+                break
 
-        except (dfu.RateLimitError, dfu.requests.HTTPError):
-            time_sleep = backoff_fun(True)['wait_time']
-            pbar.write(f'Sleeping for {time_sleep:.2f} seconds')
+            except (dfu.RateLimitError, dfu.requests.HTTPError):
+                time_sleep = backoff_fun(True)['wait_time']
+                pbar.write(f'Sleeping for {time_sleep:.2f} seconds')
 
-    if series is not None:
-        series = dfu.standardize_stock_series(series)
-        db.bulk_insert_records('eod_stockprices', series)
+        if series is not None and series.empty is not True:
+            series = dfu.standardize_stock_series(series)
 
-        series_dt = [i[1] for i in series.index.get_values()]
+            pbar.write(f"Bulk insert '{sym}', # {len(series)} records")
+            DBASE.bulk_insert_records('eod_stockprices', series)
+            DBASE.commit()
 
-        series_log = {
-            'Symbol': sym,
-            'minimum_datetime': min(series_dt).to_pydatetime(),
-            'maximum_datetime': max(series_dt).to_pydatetime(),
-            'update_dt': dt.datetime.utcnow()
-        }
+            series_dt = [i[1] for i in series.index.get_values()]
 
-        if sym_in_log is True:
-            # TODO implement update method in database.StockDB
-            pass
-        else:
-            series_log['minimum_datetime'] = min(series_dt).to_pydatetime()
-            db.insert_record('eod_stockprices_update_log', series_log)
+            if update_log is True:
+                # TODO actually implement this
+                # Record already exist in symbol log, update max time
+                # series_log = {
+                #     'Symbol': sym,
+                #     'maximum_datetime': max(series_dt).to_pydatetime(),
+                #     'update_dt': dt.datetime.utcnow()
+                # }
+                pass
 
-    db.commit()
+            else:
+                # This is a new log record. Insert a new row
+                series_log = {
+                    'Symbol': sym,
+                    'minimum_datetime': min(series_dt).to_pydatetime(),
+                    'maximum_datetime': max(series_dt).to_pydatetime(),
+                    'update_dt': dt.datetime.utcnow()
+                }
+
+                series_log['minimum_datetime'] = min(series_dt).to_pydatetime()
+                DBASE.insert_record('eod_stockprices_update_log', series_log)
+                DBASE.commit()
+
+
+def update_securities_table():
+    """Updates the 'securities' table in database
+
+    HAS SIDE EFFECTS. Will modify/update the 'securities' table
+
+    Returns
+    -------
+    Pandas dataframe, containing all securities
+    """
+
+    comp_table = list()
+    for exchange in ['NYSE', 'NASDAQ', 'AMEX', 'ETF']:
+        comp_table.append(dfu.download_symbols(exchange))
+
+    comp_table = (
+        comp_table[0].
+        append(comp_table[1]).
+        append(comp_table[2]).
+        append(comp_table[3])
+    )
+
+    DBASE.update_securities(comp_table)
+
+    DBASE.commit()
+
+    return comp_table
+
+
+if __name__ == '__main__':
+    main()
+    sys.exit()
