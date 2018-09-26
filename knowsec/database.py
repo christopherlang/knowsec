@@ -231,22 +231,24 @@ class StockDB:
         else:
             raise TypeError('param: record should be a dict, pandas')
 
+    # def update_record(self, tablename, ids, record)
+
     def bulk_insert_records(self, tablename, dataframe):
         if isinstance(dataframe, pd.core.frame.DataFrame):
             dataframe.to_sql(tablename, self._dbengine, if_exists='append',
                              index=True)
 
-    def update_company(self, dataframe):
-        dataframe.to_sql('company', self._dbengine, if_exists='replace',
-                         index=False)
+    def update_securities(self, dataframe):
+        dataframe.to_sql('securities', self._dbengine, if_exists='replace',
+                         index=True)
 
-    def retrieve_company(self, columns=None, symbol=None):
+    def retrieve_securities(self, columns=None, symbol=None):
         df_com = None
 
-        keys = self.table_keys('company')
+        keys = self.table_keys('securities')
 
         if columns is None:
-            df_com = pd.read_sql('company', self._dbengine, index_col=keys)
+            df_com = pd.read_sql('securities', self._dbengine, index_col=keys)
         else:
             if isinstance(columns, str):
                 columns = [columns]
@@ -258,7 +260,7 @@ class StockDB:
                 if 'Symbol' not in columns:
                     columns = ['Symbol'] + columns
 
-            df_com = pd.read_sql('company', self._dbengine, columns=columns,
+            df_com = pd.read_sql('securities', self._dbengine, columns=columns,
                                  index_col=keys)
 
         if symbol is not None:
@@ -307,19 +309,12 @@ class NoTableError(Error):
         self.message = message
 
 
-class Company(SQLBASE):
-    __tablename__ = 'company'
+class Securities(SQLBASE):
+    __tablename__ = 'securities'
     Symbol = Column(String, primary_key=True)
+    Listing = Column(String, primary_key=True)
     Name = Column(String)
-    LastSale = Column(Integer)
-    MarketCap = Column(Integer)
-    ADR_TSO = Column(String)
-    IPOyear = Column(Integer)
-    Sector = Column(String)
-    Industry = Column(String)
-    Summary_Quote = Column(String)
-    ExchangeListing = Column(String)
-    Update_dt = Column(String)
+    update_dt = Column(String)
 
 
 class EODPrices(SQLBASE):
