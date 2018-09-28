@@ -804,9 +804,12 @@ class Intrinio:
 
             result = result.set_index(['Symbol', 'FIGI', 'EXCHSYM', 'Date'])
 
-            col_order = ['CFIGI', 'FIGI_ticker', 'open', 'low', 'high', 'close', 'volume', 'adj_open', 'adj_low', 'adj_high', 'adj_close', 'adj_volume', 'adj_factor', 'split_ratio', 'ex_dividend']
+            col_order = ['CFIGI', 'FIGI_ticker', 'open', 'low', 'high',
+                         'close', 'volume', 'adj_open', 'adj_low', 'adj_high',
+                         'adj_close', 'adj_volume', 'adj_factor',
+                         'split_ratio', 'ex_dividend']
 
-            # result = result[col_order]
+            result = result[col_order]
         else:
             result = None
 
