@@ -9,6 +9,8 @@ from abc import ABCMeta, abstractmethod
 import numpy as np
 import functools
 import decimal
+from requests.auth import HTTPBasicAuth
+import tqdm
 
 
 STOCKSERIES_COLUMNS = ['open', 'close', 'high', 'low', 'volume']
@@ -694,6 +696,161 @@ class Barchart(DataSource):
         self._update_log()
 
         return symbol_quotes
+
+
+class Intrinio:
+    def __init__(self, verbose=True):
+        self._source_name = 'Intrinio'
+        self._valid_name = 'intrinio'
+
+        self._auth = HTTPBasicAuth('7a8c64cd06c90a7bed669378ecf218b7',
+                                   '496f710575be1b715872116b4b716abd')
+
+        self._api_url = 'https://api.intrinio.com'
+        self._credits_used = 0
+
+        self._apitz = pytz.timezone('US/Eastern')
+        self._stz = pytz.timezone('UTC')
+
+        self._verbose = verbose
+
+    def get_securities_list(self, identifier=None, query=None,
+                            exchange_symbol=None, us_only=True):
+        params = {'identifier': identifier, 'query': query,
+                  'exch_symbol': exchange_symbol,
+                  'us_only': 'Yes' if us_only else 'No',
+                  'page_size': 100}
+
+        api_url = self._api_url + "/securities"
+
+        endpoint_getter = self.api_getter(api_url, params)
+        data = self._execute_getter(endpoint_getter)
+
+        data = data if data else None
+
+        if data is not None:
+
+            result = (
+                pandas.DataFrame(data).
+                rename(columns={'ticker': 'Symbol',
+                                'stock_exchange': 'Exchange',
+                                'figi': 'FIGI',
+                                'composite_figi': 'CFIGI',
+                                'figi_ticker': 'FIGI_ticker',
+                                'composite_figi_ticker': 'CFIGI_ticker'}).
+                set_index(['Symbol', 'FIGI', 'Exchange'])
+            )
+
+            result = result[~result.index.duplicated(keep='first')]
+
+            col_order = ['security_name', 'security_type', 'primary_security',
+                         'currency', 'market_sector', 'FIGI_ticker',
+                         'CFIGI_ticker', 'delisted_security',
+                         'last_crsp_adj_date']
+
+            result = result[col_order]
+        else:
+            result = None
+
+        return result
+
+    def get_exchanges(self, identifier=None, query=None):
+        params = {'identifier': identifier, 'query': query, 'page_size': 100}
+
+        api_url = self._api_url + "/stock_exchanges"
+
+        endpoint_getter = self.api_getter(api_url, params)
+        data = self._execute_getter(endpoint_getter)
+
+        data = data if data else None
+
+        if data is not None:
+            result = (
+                pandas.DataFrame(data).
+                rename(columns={'symbol': 'Symbol', 'mic': 'MIC'}).
+                set_index(['MIC', 'Symbol'])
+            )
+
+            col_order = ['institution_name', 'acronym', 'country',
+                         'country_code', 'city', 'website']
+
+            result = result[col_order]
+        else:
+            result = None
+
+        return result
+
+    def get_exchange_prices(self, identifier, date):
+        params = {'identifier': identifier, 'price_Date': date,
+                  'page_size': 100}
+
+        api_url = self._api_url + "prices/exchange"
+
+        endpoint_getter = self.api_getter(api_url, params)
+        data = self._execute_getter(endpoint_getter)
+
+        data = data if data else None
+
+        if data is not None:
+            result = (
+                pandas.DataFrame(data)#.
+                # rename(columns={'symbol': 'Symbol', 'mic': 'MIC'}).
+                # set_index(['MIC', 'Symbol'])
+            )
+
+            # col_order = ['institution_name', 'acronym', 'country',
+            #              'country_code', 'city', 'website']
+
+            # result = result[col_order]
+        else:
+            result = None
+
+        return result
+
+    def _execute_getter(self, getter):
+        if self._verbose is True:
+            objiter = tqdm.tqdm(getter, ncols=79)
+
+        else:
+            objiter = getter
+
+        payload = [i for i in objiter]
+
+        try:
+            data = [i['data'] for i in payload]
+            data = [item for sublist in data for item in sublist]
+        except KeyError:
+            data = payload
+
+        try:
+            self._credits_used += sum([i['api_call_credits'] for i in payload])
+        except KeyError:
+            self._credits_used += 1
+
+        return data
+
+    def api_getter(self, url, params):
+        params['page_number'] = 1
+
+        session = requests.Session()
+
+        while True:
+            job_result = session.get(url, params=params, auth=self._auth)
+            job_result = job_result.json()
+
+            yield job_result
+
+            try:
+                total_pages = job_result['total_pages']
+
+            except KeyError:
+                break
+
+            if params['page_number'] < total_pages:
+                params['page_number'] += 1
+
+            else:
+                break
 
 
 def _set_tz(dt_str, dt_format, tz_i=pytz.timezone('US/Eastern'),
