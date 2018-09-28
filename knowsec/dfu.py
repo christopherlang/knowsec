@@ -780,11 +780,11 @@ class Intrinio:
 
         return result
 
-    def get_exchange_prices(self, identifier, date):
+    def get_exchange_prices(self, identifier, date=None):
         params = {'identifier': identifier, 'price_Date': date,
                   'page_size': 100}
 
-        api_url = self._api_url + "prices/exchange"
+        api_url = self._api_url + "/prices/exchange"
 
         endpoint_getter = self.api_getter(api_url, params)
         data = self._execute_getter(endpoint_getter)
@@ -793,13 +793,18 @@ class Intrinio:
 
         if data is not None:
             result = (
-                pandas.DataFrame(data)#.
-                # rename(columns={'symbol': 'Symbol', 'mic': 'MIC'}).
-                # set_index(['MIC', 'Symbol'])
+                pandas.DataFrame(data).
+                rename(columns={'ticker': 'Symbol', 'figi': 'FIGI',
+                                'composite_figi': 'CFIGI', 'date': 'Date',
+                                'figi_ticker': 'FIGI_ticker'})
+                # set_index(['Symbol', 'Symbol'])
             )
+            result['Date'] = pandas.to_datetime(result['Date'])
+            result['EXCHSYM'] = identifier
 
-            # col_order = ['institution_name', 'acronym', 'country',
-            #              'country_code', 'city', 'website']
+            result = result.set_index(['Symbol', 'FIGI', 'EXCHSYM', 'Date'])
+
+            col_order = ['CFIGI', 'FIGI_ticker', 'open', 'low', 'high', 'close', 'volume', 'adj_open', 'adj_low', 'adj_high', 'adj_close', 'adj_volume', 'adj_factor', 'split_ratio', 'ex_dividend']
 
             # result = result[col_order]
         else:
