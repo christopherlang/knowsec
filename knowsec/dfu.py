@@ -11,6 +11,7 @@ import functools
 import decimal
 from requests.auth import HTTPBasicAuth
 import tqdm
+import backoff
 
 
 STOCKSERIES_COLUMNS = ['open', 'close', 'high', 'low', 'volume']
@@ -714,6 +715,28 @@ class Intrinio:
 
         self._verbose = verbose
 
+        self._max_retries = 15
+
+    @property
+    def url(self):
+        return self._api_url
+
+    @property
+    def used_credits(self):
+        return self._credits_used
+
+    @property
+    def input_timezone(self):
+        return self._apitz
+
+    @property
+    def output_timezone(self):
+        return self._stz
+
+    @property
+    def is_verbose(self):
+        return self._verbose
+
     def get_securities_list(self, identifier=None, query=None,
                             exchange_symbol=None, us_only=True):
         params = {'identifier': identifier, 'query': query,
@@ -729,15 +752,16 @@ class Intrinio:
         data = data if data else None
 
         if data is not None:
+            col_rename = {
+                'ticker': 'Symbol', 'stock_exchange': 'Exchange',
+                'figi': 'FIGI', 'composite_figi': 'CFIGI',
+                'figi_ticker': 'FIGI_ticker',
+                'composite_figi_ticker': 'CFIGI_ticker'
+            }
 
             result = (
                 pandas.DataFrame(data).
-                rename(columns={'ticker': 'Symbol',
-                                'stock_exchange': 'Exchange',
-                                'figi': 'FIGI',
-                                'composite_figi': 'CFIGI',
-                                'figi_ticker': 'FIGI_ticker',
-                                'composite_figi_ticker': 'CFIGI_ticker'}).
+                rename(columns=col_rename).
                 set_index(['Symbol', 'FIGI', 'Exchange'])
             )
 
@@ -765,9 +789,11 @@ class Intrinio:
         data = data if data else None
 
         if data is not None:
+            col_rename = {'symbol': 'Symbol', 'mic': 'MIC'}
+
             result = (
                 pandas.DataFrame(data).
-                rename(columns={'symbol': 'Symbol', 'mic': 'MIC'}).
+                rename(columns=col_rename).
                 set_index(['MIC', 'Symbol'])
             )
 
@@ -781,6 +807,48 @@ class Intrinio:
         return result
 
     def get_exchange_prices(self, identifier, date=None):
+        """Get all stock prices in an exchange on a certain date
+
+        Parameters
+        ----------
+        identifier : str
+            The stock exchange's ticker symbol e.g. ARCX (NYSE), NASDAQ, AMEX
+        date : str or None
+            String that has the date of interest. Should be in ISO format. If
+            `None` then it is assumed be to the last full business day
+
+        Returns
+        -------
+        :obj:`pandas.core.frame.DataFrame`
+            The data frame will contain all stocks from desired stock exchange,
+            from the desired date. It has the following structure
+
+            Index
+            =====
+            Symbol : str
+                Stock exchange symbol/ticker of the security
+            EXCHSYM : str
+                Identifier of the Stock Exchange
+            Datetime : `datetime.datime`
+                UTC datetime of the trade day
+
+            Columns
+            =======
+            open, low, high, close : float
+                Price metrics, in USD, of the security
+            adj_open, adj_low, adj_high, adj_close : float
+                Adjusted version of above price metrics
+            volume, adj_volume : float
+                Actual, and adjusted number of stocks traded amongst market
+                participants on trading date
+            adj_factor : float
+            split_ratio : float
+                The split factor of the split date
+            ex_dividend : float
+                The non-split adjusted dividend per share on the ex-dividend
+                date
+        """
+
         params = {'identifier': identifier, 'price_Date': date,
                   'page_size': 100}
 
@@ -792,24 +860,45 @@ class Intrinio:
         data = data if data else None
 
         if data is not None:
-            result = (
-                pandas.DataFrame(data).
-                rename(columns={'ticker': 'Symbol', 'figi': 'FIGI',
-                                'composite_figi': 'CFIGI', 'date': 'Date',
-                                'figi_ticker': 'FIGI_ticker'})
-                # set_index(['Symbol', 'Symbol'])
+            col_rename = {
+                'ticker': 'Symbol', 'figi': 'FIGI', 'composite_figi': 'CFIGI',
+                'date': 'Datetime', 'figi_ticker': 'FIGI_ticker'
+            }
+
+            col_tonumeric = ['open', 'low', 'high', 'close', 'adj_open',
+                             'adj_low', 'adj_high', 'adj_close', 'adj_factor',
+                             'split_ratio', 'ex_dividend', 'adj_volume']
+
+            col_order = ['open', 'low', 'high', 'close', 'volume', 'adj_open',
+                         'adj_low', 'adj_high', 'adj_close', 'adj_volume',
+                         'adj_factor', 'split_ratio', 'ex_dividend']
+
+            col_index = ['Symbol', 'EXCHSYM', 'Datetime']
+
+            result = pandas.DataFrame(data).rename(columns=col_rename)
+
+            result['Datetime'] = (
+                result['Datetime'].
+                apply(lambda x: dt.datetime.strptime(x, '%Y-%m-%d')).
+                apply(lambda x: self._apitz.localize(x))
             )
-            result['Date'] = pandas.to_datetime(result['Date'])
+            # Does not make datetime naive
+            result['Datetime'] = pandas.to_datetime(result['Datetime'],
+                                                    utc=True)
+
+            result[col_tonumeric] = (result[col_tonumeric].
+                                     apply(pandas.to_numeric, errors='coerce'))
+
             result['EXCHSYM'] = identifier
 
-            result = result.set_index(['Symbol', 'FIGI', 'EXCHSYM', 'Date'])
+            result = result.set_index(col_index)
 
-            col_order = ['CFIGI', 'FIGI_ticker', 'open', 'low', 'high',
-                         'close', 'volume', 'adj_open', 'adj_low', 'adj_high',
-                         'adj_close', 'adj_volume', 'adj_factor',
-                         'split_ratio', 'ex_dividend']
+            result['volume'] = result['volume'].astype(np.int64)
 
             result = result[col_order]
+
+            result = result[~result.index.duplicated(keep='first')]
+            result = result.sort_index(0)
         else:
             result = None
 
@@ -839,11 +928,47 @@ class Intrinio:
 
     def api_getter(self, url, params):
         params['page_number'] = 1
-
+        waitfun = backoff.jittered_backoff(32, verbose=False)
         session = requests.Session()
 
         while True:
             job_result = session.get(url, params=params, auth=self._auth)
+
+            if job_result.ok is not True:
+                if job_result.status_code == 401:
+                    msg = " ".join(job_result.json()['errors'][0].values())
+
+                    raise UnauthorizedCallError(msg)
+
+                elif job_result.status_code == 403:
+                    raise ForbiddenCallError(msg)
+
+                elif job_result.status_code == 404:
+                    endpoint = url.replace(self._api_url, '')
+
+                    msg = f"Resource endpoint '{endpoint}' not found"
+
+                    raise ResourceNotFoundError(msg)
+
+                elif job_result.status_code in [429, 500, 503]:
+                    waiting_result = waitfun()
+
+                    if waiting_result['ntries'] >= self._max_retries:
+                        if job_result.status_code == 429:
+                            msg = job_result.json()['errors']['message']
+
+                            raise LimitError(msg)
+
+                        elif job_result.status_code == 500:
+                            raise ServerError('Resource server error')
+
+                        elif job_result.status_code == 503:
+                            msg = 'Service unavailable'
+                            raise ServiceUnavailableError(msg)
+
+                else:
+                    raise GeneralCallError("General error was thrown")
+
             job_result = job_result.json()
 
             yield job_result
@@ -921,7 +1046,28 @@ class TooManySymbolsError(Error):
     """
 
     def __init__(self, message):
-        super().__init__()
+        self.message = message
+
+
+class UnauthorizedCallError(Error):
+    """Exception raised when the call to the resource is Unauthorized
+
+    Attributes:
+        message -- explanation of the error
+    """
+
+    def __init__(self, message):
+        self.message = message
+
+
+class ForbiddenCallError(Error):
+    """Exception raised when the call to the resource is forbiddened
+
+    Attributes:
+        message -- explanation of the error
+    """
+
+    def __init__(self, message):
         self.message = message
 
 
@@ -933,7 +1079,17 @@ class InvalidCallError(Error):
     """
 
     def __init__(self, message):
-        super().__init__()
+        self.message = message
+
+
+class ResourceNotFoundError(Error):
+    """Exception raised for resource requested is not found
+
+    Attributes:
+        message -- explanation of the error
+    """
+
+    def __init__(self, message):
         self.message = message
 
 
@@ -945,7 +1101,28 @@ class GeneralCallError(Error):
     """
 
     def __init__(self, message):
-        super().__init__()
+        self.message = message
+
+
+class ServerError(Error):
+    """Exception raised for a general server error
+
+    Attributes:
+        message -- explanation of the error
+    """
+
+    def __init__(self, message):
+        self.message = message
+
+
+class ServiceUnavailableError(Error):
+    """Exception raised for unavailable resource
+
+    Attributes:
+        message -- explanation of the error
+    """
+
+    def __init__(self, message):
         self.message = message
 
 
@@ -957,5 +1134,15 @@ class RateLimitError(Error):
     """
 
     def __init__(self, message):
-        super().__init__()
+        self.message = message
+
+
+class LimitError(Error):
+    """Exception raised for a resource has reached a limit
+
+    Attributes:
+        message -- explanation of the error
+    """
+
+    def __init__(self, message):
         self.message = message
