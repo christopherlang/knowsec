@@ -737,8 +737,81 @@ class Intrinio:
     def is_verbose(self):
         return self._verbose
 
+    @property
+    def max_retries(self):
+        return self._max_retries
+
+    @property
+    def source_name(self):
+        return self._source_name
+
+    @property
+    def valid_name(self):
+        return self._valid_name
+
     def get_securities_list(self, identifier=None, query=None,
                             exchange_symbol=None, us_only=True):
+        """Get a listing of all securities within a stock exchange
+
+        Method parameters are used to filter the listing. If both are `None`
+        then the whole listing will be returned
+
+        Parameters
+        ----------
+        identifier : str, default None
+            The identifier for the security. If `None`, will be ignored
+        query : str, default None
+            Query search over the security name or ticker symbol. If `None`,
+            will be ignored
+        exchange_symbol : str, default None
+            The Intrinio Stock Market Symbol, used to specify which exchange
+            to look into. If `None`, all stock exchanges are considered
+        us_only : bool, default True
+            Retrieve only US-based securities
+
+        Returns
+        -------
+        :obj:`pandas.core.frame.DataFrame` or `None`
+            The data frame will contain all listings of the stock exchange
+            that meets the criteria. If `None`, then no results was received
+
+            The `pandas.core.frame.DataFrame` it has the following structure:
+
+            Index
+            =====
+            Symbol : str
+                Stock exchange symbol/ticker of the securities
+            FIGI : str
+                The OpenFIGI identifier of the securities
+            Exchange : str
+                The stock exchange the securities are listed in
+
+            Columns
+            =======
+            security_name : str
+                Security description proved by the exchange
+            security_type : str
+                Category type of the securities e.g. common stock, preferred
+            primary_security : bool
+                Is security a primary issue
+            currency : str
+                The security's traded currnecy
+            market_sector : str
+                The type of market for the security
+            FIGI_ticker : str
+                The OpenFIGI ticker symbol
+
+        Raises
+        ------
+            LimitError
+                Requests have used up the alloted number of API calls
+            ServerError
+                A generic server error was recieved. Problem on the server-side
+            ServiceUnavailableError
+                Either throttle limit hit or high system load, hence the call
+                was ignored
+        """
+
         params = {'identifier': identifier, 'query': query,
                   'exch_symbol': exchange_symbol,
                   'us_only': 'Yes' if us_only else 'No',
@@ -779,6 +852,59 @@ class Intrinio:
         return result
 
     def get_exchanges(self, identifier=None, query=None):
+        """Get a listing of all Stock Exchanges covered by the source
+
+        Method parameters are used to filter the listing. If both are `None`
+        then the whole listing will be returned
+
+        Parameters
+        ----------
+        identifier : str, default None
+            The identifier for a stock exchange, which can be a MIC, symbol, or
+            acronym. If `None`, the call will ignore the identifier
+        query : str, default None
+            Query search of the exchange's name or MIC. If `None`, the call
+            will ignore the query
+
+        Returns
+        -------
+        :obj:`pandas.core.frame.DataFrame` or `None`
+            The data frame will contain all listings of the stock exchange
+            that meets the criteria. If `None` than no results was received
+
+            The `pandas.core.frame.DataFrame` it has the following structure:
+
+            Index
+            =====
+            Symbol : str
+                Stock exchange symbol/ticker of the security
+            MIC : str
+                Identifier of the Stock Exchange
+
+            Columns
+            =======
+            institution_name : str
+                The full name of the exchange
+            acronym : str
+                Shorthand acronym of the exchange
+            country : str
+                Country where the exchange resides
+            country_code : str
+            city : str
+                City where the exchange resides
+            website : str
+
+        Raises
+        ------
+            LimitError
+                Requests have used up the alloted number of API calls
+            ServerError
+                A generic server error was recieved. Problem on the server-side
+            ServiceUnavailableError
+                Either throttle limit hit or high system load, hence the call
+                was ignored
+        """
+
         params = {'identifier': identifier, 'query': query, 'page_size': 100}
 
         api_url = self._api_url + "/stock_exchanges"
@@ -806,6 +932,57 @@ class Intrinio:
 
         return result
 
+    def get_prices(self, identifier, start=None, end=None, freq='daily'):
+        params = {'identifier': identifier, 'start_date': start,
+                  'end_date': end, 'frequency': freq, 'page_size': 100}
+
+        api_url = self._api_url + "/prices"
+
+        endpoint_getter = self.api_getter(api_url, params)
+        data = self._execute_getter(endpoint_getter)
+
+        data = data if data else None
+
+        if data is not None:
+            col_rename = {'date': 'Datetime'}
+
+            col_tonumeric = ['open', 'low', 'high', 'close', 'adj_open',
+                             'adj_low', 'adj_high', 'adj_close', 'adj_factor',
+                             'split_ratio', 'ex_dividend', 'adj_volume']
+
+            col_order = ['open', 'low', 'high', 'close', 'volume', 'adj_open',
+                         'adj_low', 'adj_high', 'adj_close', 'adj_volume',
+                         'adj_factor', 'split_ratio', 'ex_dividend']
+
+            col_index = ['Symbol', 'Datetime']
+
+            result = pandas.DataFrame(data).rename(columns=col_rename)
+
+            result['Datetime'] = (
+                result['Datetime'].
+                apply(lambda x: dt.datetime.strptime(x, '%Y-%m-%d')).
+                apply(lambda x: self._apitz.localize(x))
+            )
+            # Does not make datetime naive
+            result['Datetime'] = pandas.to_datetime(result['Datetime'],
+                                                    utc=True)
+
+            result[col_tonumeric] = (result[col_tonumeric].
+                                     apply(pandas.to_numeric, errors='coerce'))
+
+            result['Symbol'] = identifier
+
+            result = result.set_index(col_index)
+
+            result['volume'] = result['volume'].astype(np.int64)
+
+            result = result[col_order]
+
+            result = result[~result.index.duplicated(keep='first')]
+            result = result.sort_index(0)
+        else:
+            result = None
+
     def get_exchange_prices(self, identifier, date=None):
         """Get all stock prices in an exchange on a certain date
 
@@ -813,15 +990,17 @@ class Intrinio:
         ----------
         identifier : str
             The stock exchange's ticker symbol e.g. ARCX (NYSE), NASDAQ, AMEX
-        date : str or None
+        date : str, default None
             String that has the date of interest. Should be in ISO format. If
             `None` then it is assumed be to the last full business day
 
         Returns
         -------
-        :obj:`pandas.core.frame.DataFrame`
+        :obj:`pandas.core.frame.DataFrame` or `None`
             The data frame will contain all stocks from desired stock exchange,
-            from the desired date. It has the following structure
+            from the desired date. If `None` than no results was received
+
+            The `pandas.core.frame.DataFrame` it has the following structure:
 
             Index
             =====
@@ -847,9 +1026,19 @@ class Intrinio:
             ex_dividend : float
                 The non-split adjusted dividend per share on the ex-dividend
                 date
+
+        Raises
+        ------
+            LimitError
+                Requests have used up the alloted number of API calls
+            ServerError
+                A generic server error was recieved. Problem on the server-side
+            ServiceUnavailableError
+                Either throttle limit hit or high system load, hence the call
+                was ignored
         """
 
-        params = {'identifier': identifier, 'price_Date': date,
+        params = {'identifier': identifier, 'price_date': date,
                   'page_size': 100}
 
         api_url = self._api_url + "/prices/exchange"
@@ -911,7 +1100,7 @@ class Intrinio:
         else:
             objiter = getter
 
-        payload = [i for i in objiter]
+        payload = list(objiter)
 
         try:
             data = [i['data'] for i in payload]
@@ -927,6 +1116,33 @@ class Intrinio:
         return data
 
     def api_getter(self, url, params):
+        """Intrinio API request generator
+
+        Automates the REST GET request, handling single and paging requests
+
+        Parameters
+        ----------
+        url : str
+            API url with the endpoint
+        params : dict
+            A dictionary keyed on the endpoint's parameters
+
+        Yields
+        ------
+        dict
+            Actual output will vary depending on the endpoint. For most calls
+            it'll be the raw JSON payload, converted to a `dict` object
+
+        Raises
+        ------
+            LimitError
+                Requests have used up the alloted number of API calls
+            ServerError
+                A generic server error was recieved. Problem on the server-side
+            ServiceUnavailableError
+                Either throttle limit hit or high system load, hence the call
+                was ignored
+        """
         params['page_number'] = 1
         waitfun = backoff.jittered_backoff(32, verbose=False)
         session = requests.Session()
