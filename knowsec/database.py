@@ -1,6 +1,7 @@
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, Float, Integer, String, DateTime, BigInteger
+from sqlalchemy import Column, Float, String, DateTime, BigInteger
+import sqlalchemy_utils as sql_utils
 from sqlalchemy.orm import sessionmaker
 import pandas as pd
 import datetime as dt
@@ -124,6 +125,9 @@ class StockDB:
         """Create all tables declared"""
         SQLBASE.metadata.create_all(self._dbengine)
 
+    def rollback(self):
+        self._dbsession.rollback()
+
     def delete_table(self, tablename):
         """Delete a specific table
 
@@ -135,79 +139,15 @@ class StockDB:
 
         self.table_map(tablename).drop(bind=self._dbengine)
 
-    def clear_records(self, tablename):
+    def clear_table(self, tablename):
         """Clear all rows of a table
 
         Parameters
         ----------
         tablename : str
-            Table name to check for
         """
 
-        self._dbsession.query(self.table_map(tablename)).delete()
-
-    def retrieve_prices(self, symbols=None, period='eod', startdate=None,
-                        enddate=None):
-        """Retrieve price data
-
-        Currently only supports period='eod' for end of day prices
-
-        Parameters
-        ----------
-        symbols : str, list of str
-            Stock ticker to filter for. If `None`, all stock tickers are
-            returned
-        period: str
-            Either 'eod' for end of day, or `intraday`, which is not supported
-            and ignored
-        startdate, enddate : str
-            The start, end date to filter for (inclusive). Make sure `str` is
-            in ISO format i.e. %Y-%m-%d
-
-        Returns
-        -------
-        :obj:`pandas.core.frame.DataFrame`
-            Indexed on 'Symbol' and 'Datetime', with open/close/high etc.
-
-        """
-
-        table_obj = None
-        if period == 'eod':
-            table_obj = self.table_map('eod_stockprices')
-
-        elif period == 'intraday':
-            pass
-
-        else:
-            errmsg = "param: tablename must be either 'eod', 'intraday'"
-            raise ValueError(errmsg)
-
-        query_obj = self._dbsession.query(table_obj)
-
-        symbol_list = list()
-        if isinstance(symbols, str):
-            symbol_list.append(symbols)
-        else:
-            symbol_list = symbols
-
-        if symbols is not None:
-            sym_col = table_obj.columns['Symbol']
-            query_obj = query_obj.filter(sym_col.in_(symbol_list))
-
-        if startdate is not None:
-            dt_col = table_obj.columns['Datetime']
-            query_obj = query_obj.filter(dt_col >= startdate)
-
-        if enddate is not None:
-            dt_col = table_obj.columns['Datetime']
-            query_obj = query_obj.filter(dt_col <= enddate)
-
-        keys = self.table_keys('eod_stockprices')
-
-        result = pd.read_sql(query_obj.statement, query_obj.session.bind,
-                             index_col=keys)
-
-        return result
+        self._dbsession.query(self.table_class(tablename)).delete()
 
     def insert_record(self, tablename, record):
         """Insert a new record
@@ -218,64 +158,120 @@ class StockDB:
         ----------
         tablename : str
         record: dict or pandas DataFrame
+
+        Raises:
+            IntegrityError
+                The new record has keys that already exists in 'tablename'
+            TypeError
+                The new record is not of type `dict`,
+                `pandas.core.frame.DateFrame`
         """
 
-        if isinstance(record, dict) is True:
-            table = self.table_map(tablename)
-            self._dbsession.execute(table.insert(values=record))
+        if isinstance(record, dict):
+            table_class = self.table_class(tablename)
+            row = table_class(**record)
 
-        elif isinstance(record, pd.core.frame.DataFrame) is True:
+            self._dbsession.add(row)
+
+        elif isinstance(record, pd.core.frame.DataFrame):
             record.to_sql(tablename, self._dbengine, if_exists='append',
                           index=True)
 
         else:
-            raise TypeError('param: record should be a dict, pandas')
+            raise TypeError('param: record must be a dict, DataFrame')
 
-    # def update_record(self, tablename, ids, record)
+    def bulk_insert_records(self, tablename, records):
+        """Bulk insert multiple records
 
-    def bulk_insert_records(self, tablename, dataframe):
-        if isinstance(dataframe, pd.core.frame.DataFrame):
-            dataframe.to_sql(tablename, self._dbengine, if_exists='append',
-                             index=True)
 
-    def update_securities(self, dataframe):
-        dataframe.to_sql('securities', self._dbengine, if_exists='replace',
-                         index=True)
+        Parameters
+        ----------
+        tablename : str
+        record: list of dict, or pandas DataFrame
 
-    def retrieve_securities(self, columns=None, symbol=None):
-        df_com = None
+        Raises:
+            IntegrityError
+                The new records has keys that already exists in 'tablename'
+            TypeError
+                The new records is not of type `list`,
+                `pandas.core.frame.DateFrame`
+        """
 
-        keys = self.table_keys('securities')
+        if isinstance(records, list):
+            table_class = self.table_class(tablename)
+            self._dbsession.bulk_insert_mappings(table_class, records)
 
-        if columns is None:
-            df_com = pd.read_sql('securities', self._dbengine, index_col=keys)
-        else:
-            if isinstance(columns, str):
-                columns = [columns]
+        elif isinstance(records, pd.core.frame.DataFrame):
+            records.to_sql(tablename, self._dbengine, if_exists='append',
+                           index=True)
 
-                if 'Symbol' not in columns:
-                    columns.insert(0, 'Symbol')
+    def update_record(self, tablename, record):
+        table_class = self.table_class(tablename)
+        table_cols = sql_utils.get_columns(self.table_class('exchanges'))
+        table_keys = self.table_keys(tablename)
 
-            else:
-                if 'Symbol' not in columns:
-                    columns = ['Symbol'] + columns
+        if all([i in record.keys() for i in table_keys]) is not True:
+            raise KeyError('param: record does not contain all primary keys')
 
-            df_com = pd.read_sql('securities', self._dbengine, columns=columns,
-                                 index_col=keys)
+        record_insert = record.copy()
+        filter_clause = list()
+        for pkey in table_keys:
+            filter_clause.append(table_cols[pkey] == record[pkey])
+            del record_insert[pkey]
 
-        if symbol is not None:
-            if isinstance(symbol, str):
-                symbol = [symbol]
+        query_obj = self._dbsession.query(table_class).filter(*filter_clause)
 
-            df_com = df_com[df_com['Symbol'].isin(symbol)]
+        query_obj.update(record_insert)
 
-        return df_com
+    def update_records(self, tablename, records):
+        for record in records:
+            self.update_record(tablename, record)
 
-    def retrieve_security_log(self):
-        df_com = pd.read_sql('eod_stockprices_update_log', self._dbengine)
-        df_com = df_com.set_index('Symbol')
+    def replace_table(self, tablename, records):
+        self.clear_table(tablename)
+        self.bulk_insert_records(records)
 
-        return df_com
+    def slice_table(self, tablename, columns=None, filters=None,
+                    index_keys=True):
+        table_class = self.table_class(tablename)
+        table_cols = sql_utils.get_columns(self.table_class('exchanges'))
+
+        query = self._dbsession.query(table_class)
+
+        if filters is not None:
+            criteria = list()
+
+            for col_name in filters:
+                if isinstance(filters[col_name], (set, list, tuple)):
+                    elements = filters[col_name]
+                    criteria.append(table_cols[col_name].in_(elements))
+                else:
+                    criteria.append(table_cols[col_name] == filters[col_name])
+
+            query = query.filter(*criteria)
+
+        if columns is not None:
+            select_columns = list()
+
+            if isinstance(columns, (set, tuple, list)):
+                for a_col in columns:
+                    select_columns.append(table_cols[a_col])
+
+            elif isinstance(columns, str):
+                select_columns.append(table_cols[columns])
+
+            query = query.with_entities(*select_columns)
+
+        result_pd = pd.read_sql(query.statement, query.session.bind)
+
+        if index_keys is True:
+            pkeys = self.table_keys(tablename)
+            pkeys = [i for i in pkeys if i in result_pd.columns]
+
+            if pkeys:
+                result_pd = result_pd.set_index(pkeys)
+
+        return result_pd
 
     def table_map(self, tablename):
         if self.has_table(tablename) is not True:
@@ -290,6 +286,19 @@ class StockDB:
         keys = None if len(keys) == 0 else keys
 
         return keys
+
+    def table_columns(self, tablename):
+        schema = self.table_schema(tablename)
+        col_names = [i['name'] for i in schema]
+        col_names = None if len(col_names) == 0 else col_names
+
+        return col_names
+
+    def table_class(self, tablename):
+        table = self.table_map(tablename)
+        table_class = sql_utils.get_class_by_table(SQLBASE, table)
+
+        return table_class
 
 
 class Error(Exception):
@@ -312,14 +321,32 @@ class NoTableError(Error):
 class Securities(SQLBASE):
     __tablename__ = 'securities'
     Symbol = Column(String, primary_key=True)
-    Listing = Column(String, primary_key=True)
-    Name = Column(String)
-    update_dt = Column(String)
+    FIGI = Column(String, primary_key=True)
+    Exchange = Column(String, primary_key=True)
+    security_name = Column(String)
+    security_type = Column(String)
+    primary_security = Column(String)
+    currency = Column(String)
+    market_sector = Column(String)
+    FIGI_ticker = Column(String)
 
 
-class EODPrices(SQLBASE):
-    __tablename__ = 'eod_stockprices'
+class Exchanges(SQLBASE):
+    __tablename__ = 'exchanges'
     Symbol = Column(String, primary_key=True)
+    MIC = Column(String, primary_key=True)
+    institution_name = Column(String)
+    acronym = Column(String)
+    country = Column(String)
+    country_code = Column(String)
+    city = Column(String)
+    website = Column(String)
+
+
+class Prices(SQLBASE):
+    __tablename__ = 'security_prices'
+    Symbol = Column(String, primary_key=True)
+    Exchange = Column(String, primary_key=True)
     Datetime = Column(DateTime, primary_key=True)
     open = Column(BigInteger)
     high = Column(BigInteger)
@@ -336,13 +363,13 @@ class EODPrices_log(SQLBASE):
     update_dt = Column(DateTime)
 
 
-class UpdateLog(SQLBASE):
-    __tablename__ = 'update_log'
-    Datetime = Column(DateTime, primary_key=True)
-    Source = Column(String, primary_key=True)
-    Table = Column(String, primary_key=True)
-    UpdateType = Column(String, primary_key=True)
-    num_new_records = Column(Integer)
-    num_deleted_records = Column(Integer)
-    num_updated_records = Column(Integer)
-    relevant_datetime = Column(DateTime)
+# class UpdateLog(SQLBASE):
+#     __tablename__ = 'update_log'
+#     Datetime = Column(DateTime, primary_key=True)
+#     Source = Column(String, primary_key=True)
+#     Table = Column(String, primary_key=True)
+#     UpdateType = Column(String, primary_key=True)
+#     num_new_records = Column(Integer)
+#     num_deleted_records = Column(Integer)
+#     num_updated_records = Column(Integer)
+#     relevant_datetime = Column(DateTime)
