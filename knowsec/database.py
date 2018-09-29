@@ -29,30 +29,21 @@ class StockDB:
     autocommit
     """
 
-    def __init__(self, filename, autocommit=False):
+    def __init__(self, filename):
         self._dbengine = create_engine('sqlite:///' + filename, echo=False)
         self._dbsession_factory = sessionmaker(bind=self._dbengine)
-        self._dbsession = self._dbsession_factory(autocommit=autocommit)
-        self._autocommit = autocommit
+        self._dbsession = self._dbsession_factory(autocommit=False)
 
     @property
-    def autocommit(self):
-        return self._autocommit
+    def session(self):
+        return self._dbsession
 
-    @autocommit.setter
-    def autocommit(self, should_autocommit):
-        if isinstance(should_autocommit, bool) is not True:
-            raise TypeError('param: should_autocommit should be a boolean')
-
-        self._autocommit = should_autocommit
+    @property
+    def engine(self):
+        return self._dbengine
 
     def commit(self):
-        """Commit edits to database"""
-
-        if self._autocommit is True:
-            pass
-        else:
-            self._dbsession.commit()
+        self._dbsession.commit()
 
     def list_tables(self):
         """List all tables declared
@@ -81,7 +72,7 @@ class StockDB:
 
         return tablename in self.list_tables()
 
-    def table_schema(self, tablename):
+    def table_schema(self, tablename, as_dataframe=False):
         """Return the table's schema
 
         The return value contains metadata for each column
@@ -119,7 +110,15 @@ class StockDB:
         ]
         """
 
-        return inspect(self._dbengine).get_columns(tablename)
+        schema = inspect(self._dbengine).get_columns(tablename)
+
+        if as_dataframe is True:
+            schema = pd.DataFrame(schema)
+            schema = schema.rename(columns={'name': 'Column_Name'})
+            schema = schema[['Column_Name', 'primary_key', 'default',
+                             'autoincrement', 'nullable', 'type']]
+
+        return schema
 
     def create_all_tables(self):
         """Create all tables declared"""
@@ -148,6 +147,42 @@ class StockDB:
         """
 
         self._dbsession.query(self.table_class(tablename)).delete()
+
+    def retrieve_record(self, tablename, pkeys):
+        """Retrieve record(s) by primary key
+
+        The parameter `pkeys` is used to specify the filtering criteria by
+        primary key. Hence `pkeys` should be keyed on the primary key
+
+        Filtering specification follows method `slice_table`
+
+        A primary key must be present in `pkeys`. If the number of primary
+        keys supplied is less than the number of actual primary keys on the
+        table, more than one record can potentially be returned
+
+        Parameters
+        ----------
+        tablename : str
+        pdkey: list of dict
+            A `dict` keyed on primary key names, where values are used as
+            filter criteria
+
+        Returns
+        -------
+        :obj:`pandas.core.frame.DateFrame` or `None`
+            The query result is returned as a pandas DataFrame. All columns
+            in the table for that record will be returned and indexed on
+            primary keys
+
+            A `None` is returned if the results has zero rows
+        """
+
+        table_keys = self.table_keys(tablename)
+
+        if any([i in pkeys.keys() for i in table_keys]) is not True:
+            raise KeyError('param: record does not contain any primary keys')
+
+        return self.slice_table(tablename, filters=pkeys, index_keys=True)
 
     def insert_record(self, tablename, record):
         """Insert a new record
@@ -183,7 +218,6 @@ class StockDB:
     def bulk_insert_records(self, tablename, records):
         """Bulk insert multiple records
 
-
         Parameters
         ----------
         tablename : str
@@ -206,8 +240,19 @@ class StockDB:
                            index=True)
 
     def update_record(self, tablename, record):
+        """Update record in a table by key
+
+        A `record` must have all primary keys present, but does not have to
+        have all columns, just the ones that need updating
+
+        Parameters
+        ----------
+        tablename : str
+        record: dict
+        """
+
         table_class = self.table_class(tablename)
-        table_cols = sql_utils.get_columns(self.table_class('exchanges'))
+        table_cols = sql_utils.get_columns(table_class)
         table_keys = self.table_keys(tablename)
 
         if all([i in record.keys() for i in table_keys]) is not True:
@@ -224,17 +269,79 @@ class StockDB:
         query_obj.update(record_insert)
 
     def update_records(self, tablename, records):
+        """Update multiple records in a table by key
+
+        A `record` must have all primary keys present, but does not have to
+        have all columns, just the ones that need updating
+
+        This is the same as method `update_record` but loops through `records`
+
+        Parameters
+        ----------
+        tablename : str
+        record: list of dict
+        """
+
         for record in records:
             self.update_record(tablename, record)
 
     def replace_table(self, tablename, records):
+        """Clear records of a table and insert new records
+
+        Parameters
+        ----------
+        tablename : str
+        record: list of dict, or pandas DataFrame
+        """
+
         self.clear_table(tablename)
         self.bulk_insert_records(records)
 
     def slice_table(self, tablename, columns=None, filters=None,
                     index_keys=True):
+        """Retrieve data from table with basic slicing
+
+        Will return data from a table on the database, and allows column
+        selection, and basic filtering
+
+        Filters should be a `dict` object, keyed on the columns to filter on.
+        If more than one keys are present, it is assumed to be a logical AND:
+
+        filters = {'Symbol': 'AMD', 'MIC': 'AMD'} becomes, in SQL
+        WHERE Symbol = 'AMD' and MIC = 'AMD'
+
+        Values can be a single values, such as strings or integers, in which
+        case it is treated as a logical equality, or a collection, in which
+        case it is treated as a IN statement:
+
+        filters = {'Symbol': ['AMD', 'AAPL']} becomes, in SQL
+        WHERE Symbol IN ('AMD', 'AAPL')
+
+        Parameters
+        ----------
+        tablename : str
+            The name of the table
+        columns : str, list of str, None
+            The columns to be returned. If `None`, then all columns
+        filters : dict, None
+            A `dict` keyed on column names, where values are used as filter
+            criteria. If `None`, then no filtering is performed
+        index_keys : bool
+            If columns in the returned query are primary keys, should the
+            returned pandas DataFrame be indexed on them
+
+        Returns
+        -------
+        :obj:`pandas.core.frame.DateFrame` or `None`
+            The query result is returned as a pandas DataFrame. If `index_keys`
+            is `True`, then indexed on primary key columns if those columns
+            are returned
+
+            A `None` is returned if the results has zero rows
+        """
+
         table_class = self.table_class(tablename)
-        table_cols = sql_utils.get_columns(self.table_class('exchanges'))
+        table_cols = sql_utils.get_columns(table_class)
 
         query = self._dbsession.query(table_class)
 
@@ -271,9 +378,24 @@ class StockDB:
             if pkeys:
                 result_pd = result_pd.set_index(pkeys)
 
+        if result_pd.empty is True:
+            result_pd = None
+
         return result_pd
 
     def table_map(self, tablename):
+        """Convert a string table name to Table object
+
+        Returns
+        -------
+        :obj:`sqlalchemy.sql.schema.Table`
+
+        Raises
+        ------
+        NoTableError
+            Table was not found
+        """
+
         if self.has_table(tablename) is not True:
             errmsg = '\'{}\' table does not exist'.format(tablename)
             raise NoTableError(errmsg)
@@ -281,13 +403,29 @@ class StockDB:
         return SQLBASE.metadata.tables[tablename]
 
     def table_keys(self, tablename):
+        """Get table's primary keys
+
+        Returns
+        -------
+        list of str
+            A list of strings, naming the primary keys in the table
+        """
+
         schema = self.table_schema(tablename)
         keys = [i['name'] for i in schema if i['primary_key'] != 0]
-        keys = None if len(keys) == 0 else keys
+        keys = keys if keys else None
 
         return keys
 
     def table_columns(self, tablename):
+        """Get a list of column names of a table
+
+        Returns
+        -------
+        list of str
+            A list of strings, naming all columns in the table
+        """
+
         schema = self.table_schema(tablename)
         col_names = [i['name'] for i in schema]
         col_names = None if len(col_names) == 0 else col_names
@@ -295,6 +433,16 @@ class StockDB:
         return col_names
 
     def table_class(self, tablename):
+        """Convert a string table name to Declartive Meta
+
+        Primarily used to get the mapping class using SQLAlchemy ORM
+
+        Returns
+        -------
+        :obj:`sqlalchemy.ext.declarative.api.DeclarativeMeta`
+            Used in a lot of ORM querying, filtering, etc.
+        """
+
         table = self.table_map(tablename)
         table_class = sql_utils.get_class_by_table(SQLBASE, table)
 
@@ -330,6 +478,23 @@ class Securities(SQLBASE):
     market_sector = Column(String)
     FIGI_ticker = Column(String)
 
+    def __repr__(self):
+        cols = [
+            f"Symbol='{self.Symbol}'",
+            f"FIGI='{self.FIGI}'",
+            f"Exchange='{self.Exchange}'",
+            f"security_name='{self.security_name}'",
+            f"security_type='{self.security_type}'",
+            f"primary_security='{self.primary_security}'",
+            f"currency='{self.currency}'",
+            f"market_sector='{self.market_sector}'"
+            f"FIGI_ticker='{self.FIGI_ticker}'"
+        ]
+
+        repr_statement = ", ".join(cols)
+
+        return "<Securities({})>".format(repr_statement)
+
 
 class Exchanges(SQLBASE):
     __tablename__ = 'exchanges'
@@ -342,6 +507,22 @@ class Exchanges(SQLBASE):
     city = Column(String)
     website = Column(String)
 
+    def __repr__(self):
+        cols = [
+            f"Symbol='{self.Symbol}'",
+            f"MIC='{self.MIC}'",
+            f"institution_name='{self.institution_name}'",
+            f"acronym='{self.acronym}'",
+            f"country='{self.country}'",
+            f"country_code='{self.country_code}'",
+            f"city='{self.city}'",
+            f"website='{self.website}'"
+        ]
+
+        repr_statement = ", ".join(cols)
+
+        return "<Exchanges({})>".format(repr_statement)
+
 
 class Prices(SQLBASE):
     __tablename__ = 'security_prices'
@@ -353,6 +534,22 @@ class Prices(SQLBASE):
     low = Column(BigInteger)
     close = Column(BigInteger)
     volume = Column(BigInteger)
+
+    def __repr__(self):
+        cols = [
+            f"Symbol='{self.Symbol}'",
+            f"Exchange='{self.Exchange}'",
+            f"Datetime='{self.Datetime}'",
+            f"open='{self.open}'",
+            f"high='{self.high}'",
+            f"low='{self.low}'",
+            f"close='{self.close}'",
+            f"volume='{self.volume}'"
+        ]
+
+        repr_statement = ", ".join(cols)
+
+        return "<Prices({})>".format(repr_statement)
 
 
 class EODPrices_log(SQLBASE):
