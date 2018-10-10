@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, Float, String, DateTime, BigInteger
+from sqlalchemy import Column, Float, String, DateTime, Date, BigInteger, Numeric
 import sqlalchemy_utils as sql_utils
 from sqlalchemy.orm import sessionmaker
 import pandas as pd
@@ -8,6 +8,19 @@ import datetime as dt
 
 
 SQLBASE = declarative_base()
+
+
+def constr_sqlite(filename):
+    constr = f'sqlite:///{filename}'
+
+    return constr
+
+
+def constr_postgres(uid, pwd, host, port, dbname, kwargs=None):
+    # postgresql+psycopg2://user:password@host:port/dbname
+    constr = f'postgresql+psycopg2://{uid}:{pwd}@{host}:{port}/{dbname}'
+
+    return constr
 
 
 class StockDB:
@@ -29,8 +42,8 @@ class StockDB:
     autocommit
     """
 
-    def __init__(self, filename):
-        self._dbengine = create_engine('sqlite:///' + filename, echo=False)
+    def __init__(self, connection_string, echo=False):
+        self._dbengine = create_engine(connection_string, echo=echo)
         self._dbsession_factory = sessionmaker(bind=self._dbengine)
         self._dbsession = self._dbsession_factory(autocommit=False)
 
@@ -468,27 +481,27 @@ class NoTableError(Error):
 
 class Securities(SQLBASE):
     __tablename__ = 'securities'
-    Symbol = Column(String, primary_key=True)
-    FIGI = Column(String, primary_key=True)
-    Exchange = Column(String, primary_key=True)
+    symbol = Column(String, primary_key=True)
+    figi = Column(String, primary_key=True)
+    exchange = Column(String, primary_key=True)
     security_name = Column(String)
     security_type = Column(String)
     primary_security = Column(String)
     currency = Column(String)
     market_sector = Column(String)
-    FIGI_ticker = Column(String)
+    figi_ticker = Column(String)
 
     def __repr__(self):
         cols = [
-            f"Symbol='{self.Symbol}'",
-            f"FIGI='{self.FIGI}'",
-            f"Exchange='{self.Exchange}'",
+            f"symbol='{self.Symbol}'",
+            f"figi='{self.FIGI}'",
+            f"exchange='{self.Exchange}'",
             f"security_name='{self.security_name}'",
             f"security_type='{self.security_type}'",
             f"primary_security='{self.primary_security}'",
             f"currency='{self.currency}'",
             f"market_sector='{self.market_sector}'"
-            f"FIGI_ticker='{self.FIGI_ticker}'"
+            f"figi_ticker='{self.FIGI_ticker}'"
         ]
 
         repr_statement = ", ".join(cols)
@@ -498,8 +511,8 @@ class Securities(SQLBASE):
 
 class Exchanges(SQLBASE):
     __tablename__ = 'exchanges'
-    Symbol = Column(String, primary_key=True)
-    MIC = Column(String, primary_key=True)
+    symbol = Column(String, primary_key=True)
+    mic = Column(String, primary_key=True)
     institution_name = Column(String)
     acronym = Column(String)
     country = Column(String)
@@ -509,8 +522,8 @@ class Exchanges(SQLBASE):
 
     def __repr__(self):
         cols = [
-            f"Symbol='{self.Symbol}'",
-            f"MIC='{self.MIC}'",
+            f"symbol='{self.Symbol}'",
+            f"mic='{self.MIC}'",
             f"institution_name='{self.institution_name}'",
             f"acronym='{self.acronym}'",
             f"country='{self.country}'",
@@ -526,20 +539,23 @@ class Exchanges(SQLBASE):
 
 class Prices(SQLBASE):
     __tablename__ = 'security_prices'
-    Symbol = Column(String, primary_key=True)
-    Exchange = Column(String, primary_key=True)
-    Datetime = Column(DateTime, primary_key=True)
-    open = Column(BigInteger)
-    high = Column(BigInteger)
-    low = Column(BigInteger)
-    close = Column(BigInteger)
+    symbol = Column(String, primary_key=True)
+    exchange = Column(String, primary_key=True)
+    date = Column(Date, primary_key=True)
+    open = Column(Numeric)
+    high = Column(Numeric)
+    low = Column(Numeric)
+    close = Column(Numeric)
     volume = Column(BigInteger)
+    adjusted_close = Column(Numeric)
+    dividend_amount = Column(Numeric)
+    split_coefficient = Column(Numeric)
 
     def __repr__(self):
         cols = [
-            f"Symbol='{self.Symbol}'",
-            f"Exchange='{self.Exchange}'",
-            f"Datetime='{self.Datetime}'",
+            f"symbol='{self.Symbol}'",
+            f"exchange='{self.Exchange}'",
+            f"date='{self.Date}'",
             f"open='{self.open}'",
             f"high='{self.high}'",
             f"low='{self.low}'",
@@ -553,8 +569,8 @@ class Prices(SQLBASE):
 
 
 class EODPrices_log(SQLBASE):
-    __tablename__ = 'eod_stockprices_update_log'
-    Symbol = Column(String, primary_key=True)
+    __tablename__ = 'prices_log'
+    symbol = Column(String, primary_key=True)
     minimum_datetime = Column(DateTime)
     maximum_datetime = Column(DateTime)
     update_dt = Column(DateTime)
