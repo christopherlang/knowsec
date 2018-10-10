@@ -470,11 +470,15 @@ class AlphaVantage(DataSource):
         self._req_object = requests.get(self._api_url, params=params)
 
         if self._req_object.ok is not True:
-            raise self._req_object.raise_for_status()
+            raise GeneralCallError("Unknown issue, with no solution")
 
         while True:
             if len(self._req_object.json().keys()) < 2:
-                req_key = list(self._req_object.json().keys())[0]
+                try:
+                    req_key = list(self._req_object.json().keys())[0]
+
+                except IndexError:
+                    raise GeneralCallError('Index error was hit, unknown')
 
                 if req_key == 'Error Message':
                     # TODO log the message. Might be invalid API call
