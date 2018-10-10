@@ -9,135 +9,201 @@ import datetime as dt
 import functools
 
 
-CONFIG = dict()
-with open('../config/data_config.yaml', 'r') as f:
-    CONFIG['data'] = yaml.load(f)
-
-DBASE = database.StockDB('../db/storage4.db')
-DSOURCE = dfu.AlphaVantage()
+with open('../config/config.yaml', 'r') as f:
+    CONFIG = yaml.load(f)
 
 
-def main():
-    DBASE.create_all_tables()
+# DBASE = database.StockDB('../db/storage10.db')
+DSOURCE_A = dfu.AlphaVantage()
+DSOURCE_B = dfu.Intrinio(verbose=False)
 
-    # Perform company table update
-    comp_table = update_securities_table()
+knowsec_creds = CONFIG['dbserver']
+knowsec_creds['dbname'] = 'knowsec'
+constr = database.constr_postgres(**knowsec_creds)
+DBASE = database.StockDB(constr)
 
-    stock_update_log = DBASE.retrieve_security_log()
-    pdidx = pandas.IndexSlice
+prices = pandas.read_csv('../data/historicals2.csv', sep=',')
+prices['Date'] = pandas.to_datetime(prices['Date'])
 
-    symbol_list = set([i[0] for i in comp_table.index.get_values()])
-    symbol_list = [i for i in symbol_list if i != '']
+securities = pandas.read_csv('../data/securities.tsv', sep='\t')
+securities = securities[['Symbol', 'Exchange']].drop_duplicates()
+securities = securities.set_index('Symbol')
 
-    backoff_fun = backoff.exponential_backoff(120, False)
-    pbar = tqdm.tqdm(symbol_list, ncols=100)
-    for sym in pbar:
-        # Determine first if it needs a full update, or partial update
-        # Done through the 'stock_update_log'
-        # If symbol does not exist, or if 'stock_update_log' is None,
-        # do full update. Otherwise, partial
-        try:
-            sym_update_log = stock_update_log.loc[[pdidx[sym]], :]
-            sym_in_log = True
+prices = prices.join(securities, on='Symbol', how='inner')
 
-        except KeyError:
-            sym_update_log = None
-            sym_in_log = False
+prices = prices.set_index(['Symbol', 'Exchange', 'Date'])
 
-        perform_full = sym_in_log is not True or len(stock_update_log) == 0
+DBASE.bulk_insert_records('security_prices', prices.to_dict('records'))
+# def main():
+#     DSOURCE_B.get_exchanges().to_csv('../data/exchanges.tsv', sep='\t',
+#                                      encoding='utf-8')
 
-        if perform_full is True:
-            update_log = False
+#     securities = [DSOURCE_B.get_securities_list(exchange_symbol=i)
+#                   for i in ['ARCX', 'NASDAQ', 'AMEX']]
 
-            get_data = functools.partial(DSOURCE.retrieve_data, output='full')
+#     securities = functools.reduce(lambda pd1, pd2: pd1.append(pd2), securities)
 
-        else:
-            update_log = True
+#     securities.to_csv('../data/securities.tsv', sep='\t', encoding='utf-8')
 
-            from_dt = sym_update_log.loc[pdidx[sym], 'maximum_datetime']
-            from_dt = from_dt.to_pydatetime() + dt.timedelta(days=1)
+#     symbol_list = {i[0] for i in securities.index.values}
+#     symbol_list = list(symbol_list)
+#     symbol_list.sort()
 
-            if from_dt < dt.datetime.utcnow():
-                get_data = functools.partial(DSOURCE.retrieve_latest,
-                                             from_dt=from_dt)
+#     symbol_list = symbol_list[symbol_list.index('SDS'):]
 
-            else:
-                continue
+#     backoff_fun = backoff.jittered_backoff(120, verbose=False)
+#     pbar = tqdm.tqdm(symbol_list, ncols=100)
 
-        series = None
-        break_
-        while True:
-            try:
-                series = get_data(sym)
-                backoff_fun(False)
-                break
+#     for sym in pbar:
+#         series = None
 
-            except (dfu.InvalidCallError, dfu.GeneralCallError):
-                break
+#         while True:
+#             try:
+#                 pbar.write(f'Data for symbol: {sym}')
+#                 series = DSOURCE_A.retrieve_data(sym, output='full')
 
-            except (dfu.RateLimitError, dfu.requests.HTTPError):
-                time_sleep = backoff_fun(True)['wait_time']
-                pbar.write(f'Sleeping for {time_sleep:.2f} seconds')
+#                 backoff_fun(False)
 
-        if series is not None and series.empty is not True:
-            series = dfu.standardize_stock_series(series)
+#                 pbar.write(f'{sym} API call was successful')
 
-            pbar.write(f"Bulk insert '{sym}', # {len(series)} records")
-            DBASE.bulk_insert_records('eod_stockprices', series)
-            DBASE.commit()
+#                 try:
+#                     series.to_csv('../data/historicals/' + sym + '.tsv', sep='\t',
+#                                   encoding='utf-8')
+#                 except FileNotFoundError as e:
+#                     print(e)
+#                     print(series)
 
-            series_dt = [i[1] for i in series.index.get_values()]
+#                 break
 
-            if update_log is True:
-                # TODO actually implement this
-                # Record already exist in symbol log, update max time
-                # series_log = {
-                #     'Symbol': sym,
-                #     'maximum_datetime': max(series_dt).to_pydatetime(),
-                #     'update_dt': dt.datetime.utcnow()
-                # }
-                pass
+#             except (dfu.InvalidCallError, dfu.GeneralCallError):
+#                 pbar.write(f'Data for symbol: {sym} has failed, skipping')
+#                 break
 
-            else:
-                # This is a new log record. Insert a new row
-                series_log = {
-                    'Symbol': sym,
-                    'minimum_datetime': min(series_dt).to_pydatetime(),
-                    'maximum_datetime': max(series_dt).to_pydatetime(),
-                    'update_dt': dt.datetime.utcnow()
-                }
+#             except (dfu.RateLimitError, dfu.requests.HTTPError):
+#                 time_sleep = backoff_fun(True)['wait_time']
+#                 pbar.write(f'Sleeping for {time_sleep:.2f} seconds')
 
-                series_log['minimum_datetime'] = min(series_dt).to_pydatetime()
-                DBASE.insert_record('eod_stockprices_update_log', series_log)
-                DBASE.commit()
+# def main():
+#     DBASE.create_all_tables()
+
+#     # Perform company table update
+#     comp_table = update_securities_table()
+
+#     stock_update_log = DBASE.retrieve_security_log()
+#     pdidx = pandas.IndexSlice
+
+#     symbol_list = set([i[0] for i in comp_table.index.get_values()])
+#     symbol_list = [i for i in symbol_list if i != '']
+
+#     backoff_fun = backoff.exponential_backoff(120, False)
+#     pbar = tqdm.tqdm(symbol_list, ncols=100)
+#     for sym in pbar:
+#         # Determine first if it needs a full update, or partial update
+#         # Done through the 'stock_update_log'
+#         # If symbol does not exist, or if 'stock_update_log' is None,
+#         # do full update. Otherwise, partial
+#         try:
+#             sym_update_log = stock_update_log.loc[[pdidx[sym]], :]
+#             sym_in_log = True
+
+#         except KeyError:
+#             sym_update_log = None
+#             sym_in_log = False
+
+#         perform_full = sym_in_log is not True or len(stock_update_log) == 0
+
+#         if perform_full is True:
+#             update_log = False
+
+#             get_data = functools.partial(DSOURCE.retrieve_data, output='full')
+
+#         else:
+#             update_log = True
+
+#             from_dt = sym_update_log.loc[pdidx[sym], 'maximum_datetime']
+#             from_dt = from_dt.to_pydatetime() + dt.timedelta(days=1)
+
+#             if from_dt < dt.datetime.utcnow():
+#                 get_data = functools.partial(DSOURCE.retrieve_latest,
+#                                              from_dt=from_dt)
+
+#             else:
+#                 continue
+
+#         series = None
+#         break_
+#         while True:
+#             try:
+#                 series = get_data(sym)
+#                 backoff_fun(False)
+#                 break
+
+#             except (dfu.InvalidCallError, dfu.GeneralCallError):
+#                 break
+
+#             except (dfu.RateLimitError, dfu.requests.HTTPError):
+#                 time_sleep = backoff_fun(True)['wait_time']
+#                 pbar.write(f'Sleeping for {time_sleep:.2f} seconds')
+
+#         if series is not None and series.empty is not True:
+#             series = dfu.standardize_stock_series(series)
+
+#             pbar.write(f"Bulk insert '{sym}', # {len(series)} records")
+#             DBASE.bulk_insert_records('eod_stockprices', series)
+#             DBASE.commit()
+
+#             series_dt = [i[1] for i in series.index.get_values()]
+
+#             if update_log is True:
+#                 # TODO actually implement this
+#                 # Record already exist in symbol log, update max time
+#                 # series_log = {
+#                 #     'Symbol': sym,
+#                 #     'maximum_datetime': max(series_dt).to_pydatetime(),
+#                 #     'update_dt': dt.datetime.utcnow()
+#                 # }
+#                 pass
+
+#             else:
+#                 # This is a new log record. Insert a new row
+#                 series_log = {
+#                     'Symbol': sym,
+#                     'minimum_datetime': min(series_dt).to_pydatetime(),
+#                     'maximum_datetime': max(series_dt).to_pydatetime(),
+#                     'update_dt': dt.datetime.utcnow()
+#                 }
+
+#                 series_log['minimum_datetime'] = min(series_dt).to_pydatetime()
+#                 DBASE.insert_record('eod_stockprices_update_log', series_log)
+#                 DBASE.commit()
 
 
-def update_securities_table():
-    """Updates the 'securities' table in database
+# def update_securities_table():
+#     """Updates the 'securities' table in database
 
-    HAS SIDE EFFECTS. Will modify/update the 'securities' table
+#     HAS SIDE EFFECTS. Will modify/update the 'securities' table
 
-    Returns
-    -------
-    Pandas dataframe, containing all securities
-    """
+#     Returns
+#     -------
+#     Pandas dataframe, containing all securities
+#     """
 
-    comp_table = list()
-    for exchange in ['NYSE', 'NASDAQ', 'AMEX', 'ETF']:
-        comp_table.append(dfu.download_symbols(exchange))
+#     comp_table = list()
+#     for exchange in ['NYSE', 'NASDAQ', 'AMEX', 'ETF']:
+#         comp_table.append(dfu.download_symbols(exchange))
 
-    comp_table = (
-        comp_table[0].
-        append(comp_table[1]).
-        append(comp_table[2]).
-        append(comp_table[3])
-    )
+#     comp_table = (
+#         comp_table[0].
+#         append(comp_table[1]).
+#         append(comp_table[2]).
+#         append(comp_table[3])
+#     )
 
-    DBASE.update_securities(comp_table)
+#     DBASE.update_securities(comp_table)
 
-    DBASE.commit()
+#     DBASE.commit()
 
-    return comp_table
+#     return comp_table
 
 
 if __name__ == '__main__':
