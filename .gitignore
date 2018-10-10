@@ -1,4 +1,5 @@
 # Additional annoying files/directories
+data/*
 .DS_Store
 *.db
 *sublime*
