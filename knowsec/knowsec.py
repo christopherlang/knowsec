@@ -134,8 +134,10 @@ def main():
     securities_groups = itertools.groupby(securities, lambda x: x[0])
     ngroups = len({i[0] for i in securities})
 
-    # Further, to reduce time spend querying the database, we chunk the groups
-    chunk_groups
+    # Further, to reduce time spend querying the database, we cache results
+    # for insertion and pull in whole prices_log
+    price_cache = list()
+    existing_securities = DBASE.slice_table('prices_log')
 
     secpbar = tqdm.tqdm(securities_groups, ncols=100, total=ngroups)
 
@@ -149,18 +151,6 @@ def main():
         new_eod_records = list()
 
         exchs = [i[1] for i in sec_entry]
-
-        while True:
-            try:
-                existing_rec = DBASE.retrieve_record('prices_log',
-                                                     {'symbol': symbol})
-                sql_bckoff(False)
-                break
-
-            except exc.OperationalError:
-                sql_waited = sql_bckoff(True)
-                DBASE.rollback()
-
         # Four update scenarios:
         #   1. The 'prices_log' table is empty
         #   2. No record for that security exist in 'prices_log'
@@ -174,6 +164,11 @@ def main():
         # Scenario 4 means pull prices from `exchange_prices`
         # Scenario 5 means pull prices from `exchange_prices` and continue
         # to pull historicals
+
+        try:
+            existing_rec = existing_securities.loc[IDX[[symbol]], :]
+        except KeyError:
+            existing_rec = None
 
         if existing_rec is None:
             # TODO pull all historicals from AlphaVantage
