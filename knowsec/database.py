@@ -1,10 +1,12 @@
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import create_engine, inspect, or_, and_
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, Float, String, DateTime, Date, BigInteger, Numeric
+from sqlalchemy import Column, Float, String, DateTime, Date, Integer, BigInteger, Numeric, Boolean
 import sqlalchemy_utils as sql_utils
 from sqlalchemy.orm import sessionmaker
 import pandas as pd
 import datetime as dt
+import itertools
+import collections
 
 
 SQLBASE = declarative_base()
@@ -58,6 +60,9 @@ class StockDB:
     def commit(self):
         self._dbsession.commit()
 
+    def close(self):
+        self._dbsession.close()
+
     def list_tables(self):
         """List all tables declared
 
@@ -108,7 +113,7 @@ class StockDB:
                 'default': None,
                 'name': 'Sector',
                 'nullable': True,
-                'primary_key': 0,
+                'primary_key': True,
                 'type': TEXT()
             },
             {
@@ -116,14 +121,22 @@ class StockDB:
                 'default': None,
                 'name': 'Industry',
                 'nullable': True,
-                'primary_key': 0,
+                'primary_key': True,
                 'type': TEXT()
             },
             ...
         ]
         """
 
+        keys = inspect(self.table_class(tablename)).primary_key
+        keys = [i.name for i in keys]
+
         schema = inspect(self._dbengine).get_columns(tablename)
+        for a_schema in schema:
+            if a_schema['name'] in keys:
+                a_schema['primary_key'] = True
+            else:
+                a_schema['primary_key'] = False
 
         if as_dataframe is True:
             schema = pd.DataFrame(schema)
@@ -310,6 +323,87 @@ class StockDB:
         self.clear_table(tablename)
         self.bulk_insert_records(records)
 
+    def _raise_missing_pkeys(self, tablename, pkeys):
+        if isinstance(pkeys, (list, set, tuple)):
+            pkeys_provided = [i.keys() for i in pkeys]
+        elif isinstance(pkeys, dict):
+            pkeys_provided = [pkeys.keys()]
+
+        table_keys = self.table_keys(tablename)
+        has_pkeys = list()
+        for a_pkey_provided in pkeys_provided:
+            has_pkeys.append(all([i in a_pkey_provided for i in table_keys]))
+
+        if all(has_pkeys) is not True:
+            raise KeyError(f'Not all records have all primary keys')
+
+        else:
+            return True
+
+    def record_exists(self, tablename, records, invert=False):
+        self._raise_missing_pkeys(tablename, records)
+
+        pkeys = self.table_keys(tablename)
+        pkeys_only = list()
+        table_filters = list()
+
+        for rec in records:
+            pkey_rec = {k: v for k, v in rec.items() if k in pkeys}
+            pkeys_only.append(pkey_rec)
+            table_filters.append(pkey_rec)
+
+        result = list()
+        for a_filter in table_filters:
+            sub_query = self._construct_filter(a_filter, tablename)
+            sub_query = sub_query.exists()
+            sub_query = self._dbsession.query(sub_query)
+            result.append(sub_query.scalar())
+
+        if invert is True:
+            result = [not i for i in result]
+
+        return result
+
+    def _construct_filter(self, filters, tablename, query=None):
+        table_class = self.table_class(tablename)
+        table_cols = sql_utils.get_columns(table_class)
+
+        if query is None:
+            query = self._dbsession.query(table_class)
+
+        result_query = None
+
+        if isinstance(filters, dict):
+            criteria = list()
+
+            for col_name in filters:
+                if isinstance(filters[col_name], (set, list, tuple)):
+                    elements = filters[col_name]
+                    criteria.append(table_cols[col_name].in_(elements))
+                else:
+                    criteria.append(table_cols[col_name] == filters[col_name])
+
+            result_query = query.filter(*criteria)
+
+        else:
+            or_criterias = list()
+
+            for a_filter in filters:
+                criteria = list()
+
+                for col_name in a_filter:
+                    if isinstance(a_filter[col_name], (set, list, tuple)):
+                        elements = a_filter[col_name]
+                        criteria.append(table_cols[col_name].in_(elements))
+                    else:
+                        criteria.append(table_cols[col_name] == a_filter[col_name])
+
+                or_criterias.append(and_(*criteria))
+
+            result_query = query.filter(or_(*or_criterias))
+
+        return result_query
+
     def slice_table(self, tablename, columns=None, filters=None,
                     index_keys=True):
         """Retrieve data from table with basic slicing
@@ -336,7 +430,7 @@ class StockDB:
             The name of the table
         columns : str, list of str, None
             The columns to be returned. If `None`, then all columns
-        filters : dict, None
+        filters : dict, list of dict, None
             A `dict` keyed on column names, where values are used as filter
             criteria. If `None`, then no filtering is performed
         index_keys : bool
@@ -359,16 +453,34 @@ class StockDB:
         query = self._dbsession.query(table_class)
 
         if filters is not None:
-            criteria = list()
+            if isinstance(filters, dict):
+                criteria = list()
 
-            for col_name in filters:
-                if isinstance(filters[col_name], (set, list, tuple)):
-                    elements = filters[col_name]
-                    criteria.append(table_cols[col_name].in_(elements))
-                else:
-                    criteria.append(table_cols[col_name] == filters[col_name])
+                for col_name in filters:
+                    if isinstance(filters[col_name], (set, list, tuple)):
+                        elements = filters[col_name]
+                        criteria.append(table_cols[col_name].in_(elements))
+                    else:
+                        criteria.append(table_cols[col_name] == filters[col_name])
 
-            query = query.filter(*criteria)
+                query = query.filter(*criteria)
+
+            else:
+                or_criterias = list()
+
+                for a_filter in filters:
+                    criteria = list()
+
+                    for col_name in a_filter:
+                        if isinstance(a_filter[col_name], (set, list, tuple)):
+                            elements = a_filter[col_name]
+                            criteria.append(table_cols[col_name].in_(elements))
+                        else:
+                            criteria.append(table_cols[col_name] == a_filter[col_name])
+
+                    or_criterias.append(and_(*criteria))
+
+                query = query.filter(or_(*or_criterias))
 
         if columns is not None:
             select_columns = list()
@@ -425,7 +537,7 @@ class StockDB:
         """
 
         schema = self.table_schema(tablename)
-        keys = [i['name'] for i in schema if i['primary_key'] != 0]
+        keys = [i['name'] for i in schema if i['primary_key'] is True]
         keys = keys if keys else None
 
         return keys
@@ -490,6 +602,9 @@ class Securities(SQLBASE):
     currency = Column(String)
     market_sector = Column(String)
     figi_ticker = Column(String)
+    cfigi_ticker = Column(String)
+    delisted_security = Column(Boolean)
+    last_crsp_adj_date = Column(Date)
 
     def __repr__(self):
         cols = [
@@ -571,18 +686,18 @@ class Prices(SQLBASE):
 class EODPrices_log(SQLBASE):
     __tablename__ = 'prices_log'
     symbol = Column(String, primary_key=True)
-    minimum_datetime = Column(DateTime)
-    maximum_datetime = Column(DateTime)
-    update_dt = Column(DateTime)
+    min_date = Column(Date)
+    max_date = Column(Date)
+    update_dt = Column(DateTime(timezone=True))
+    check_dt = Column(DateTime(timezone=True))
 
 
-# class UpdateLog(SQLBASE):
-#     __tablename__ = 'update_log'
-#     Datetime = Column(DateTime, primary_key=True)
-#     Source = Column(String, primary_key=True)
-#     Table = Column(String, primary_key=True)
-#     UpdateType = Column(String, primary_key=True)
-#     num_new_records = Column(Integer)
-#     num_deleted_records = Column(Integer)
-#     num_updated_records = Column(Integer)
-#     relevant_datetime = Column(DateTime)
+class Update_log(SQLBASE):
+    __tablename__ = 'update_log'
+    table = Column(String, primary_key=True)
+    update_dt = Column(DateTime, primary_key=True)
+    update_type = Column(String, primary_key=True)
+    used_credits = Column(Integer)
+    new_records = Column(Integer)
+    deleted_records = Column(Integer)
+    updated_records = Column(Integer)
