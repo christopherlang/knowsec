@@ -413,7 +413,7 @@ class AlphaVantage(DataSource):
         histprice = pandas.DataFrame.from_dict(resource['series'])
 
         result = (
-            histprice.set_index(['Symbol', 'Datetime'], verify_integrity=True)
+            histprice.set_index(['symbol', 'date'], verify_integrity=True)
             .rename(columns=self._column_rename)
             .sort_index()
         )
@@ -528,8 +528,9 @@ class AlphaVantage(DataSource):
                     val = dtype_map[0](dtype_map[1](val) * dtype_map[2])
                     row[row_element_name] = val
 
-            row['Datetime'] = _set_tz(date, '%Y-%m-%d', tz_f=self._timezone)
-            row['Symbol'] = symbol
+            row['date'] = _set_tz(date, '%Y-%m-%d', tz_f=self._timezone)
+            row['date'] = row['date'].date()
+            row['symbol'] = symbol
 
         ts_data = [i for i in req_result.values()]
 
@@ -783,11 +784,11 @@ class Intrinio:
 
             Index
             =====
-            Symbol : str
+            symbol : str
                 Stock exchange symbol/ticker of the securities
-            FIGI : str
+            figi : str
                 The OpenFIGI identifier of the securities
-            Exchange : str
+            exchange : str
                 The stock exchange the securities are listed in
 
             Columns
@@ -802,7 +803,7 @@ class Intrinio:
                 The security's traded currnecy
             market_sector : str
                 The type of market for the security
-            FIGI_ticker : str
+            figi_ticker : str
                 The OpenFIGI ticker symbol
 
         Raises
@@ -830,23 +831,23 @@ class Intrinio:
 
         if data is not None:
             col_rename = {
-                'ticker': 'Symbol', 'stock_exchange': 'Exchange',
-                'figi': 'FIGI', 'composite_figi': 'CFIGI',
-                'figi_ticker': 'FIGI_ticker',
-                'composite_figi_ticker': 'CFIGI_ticker'
+                'ticker': 'symbol', 'stock_exchange': 'exchange',
+                'figi': 'figi', 'composite_figi': 'cfigi',
+                'figi_ticker': 'figi_ticker',
+                'composite_figi_ticker': 'cfigi_ticker'
             }
 
             result = (
                 pandas.DataFrame(data).
                 rename(columns=col_rename).
-                set_index(['Symbol', 'FIGI', 'Exchange'])
+                set_index(['symbol', 'figi', 'exchange'])
             )
 
             result = result[~result.index.duplicated(keep='first')]
 
             col_order = ['security_name', 'security_type', 'primary_security',
-                         'currency', 'market_sector', 'FIGI_ticker',
-                         'CFIGI_ticker', 'delisted_security',
+                         'currency', 'market_sector', 'figi_ticker',
+                         'cfigi_ticker', 'delisted_security',
                          'last_crsp_adj_date']
 
             result = result[col_order]
@@ -880,9 +881,9 @@ class Intrinio:
 
             Index
             =====
-            Symbol : str
+            symbol : str
                 Stock exchange symbol/ticker of the security
-            MIC : str
+            mic : str
                 Identifier of the Stock Exchange
 
             Columns
@@ -919,12 +920,12 @@ class Intrinio:
         data = data if data else None
 
         if data is not None:
-            col_rename = {'symbol': 'Symbol', 'mic': 'MIC'}
+            col_rename = {'symbol': 'symbol', 'mic': 'mic'}
 
             result = (
                 pandas.DataFrame(data).
                 rename(columns=col_rename).
-                set_index(['MIC', 'Symbol'])
+                set_index(['mic', 'symbol'])
             )
 
             col_order = ['institution_name', 'acronym', 'country',
@@ -948,8 +949,6 @@ class Intrinio:
         data = data if data else None
 
         if data is not None:
-            col_rename = {'date': 'Datetime'}
-
             col_tonumeric = ['open', 'low', 'high', 'close', 'adj_open',
                              'adj_low', 'adj_high', 'adj_close', 'adj_factor',
                              'split_ratio', 'ex_dividend', 'adj_volume']
@@ -958,23 +957,22 @@ class Intrinio:
                          'adj_low', 'adj_high', 'adj_close', 'adj_volume',
                          'adj_factor', 'split_ratio', 'ex_dividend']
 
-            col_index = ['Symbol', 'Datetime']
+            col_index = ['symbol', 'date']
 
-            result = pandas.DataFrame(data).rename(columns=col_rename)
+            result = pandas.DataFrame(data)
 
-            result['Datetime'] = (
-                result['Datetime'].
-                apply(lambda x: dt.datetime.strptime(x, '%Y-%m-%d')).
-                apply(lambda x: self._apitz.localize(x))
+            result['date'] = (
+                result['date'].
+                apply(lambda x: _set_tz(x, '%Y-%m-%d', self._apitz, self._stz,
+                                        True).date())
             )
             # Does not make datetime naive
-            result['Datetime'] = pandas.to_datetime(result['Datetime'],
-                                                    utc=True)
+            # result['date'] = pandas.to_datetime(result['date'], utc=True)
 
             result[col_tonumeric] = (result[col_tonumeric].
                                      apply(pandas.to_numeric, errors='coerce'))
 
-            result['Symbol'] = identifier
+            result['symbol'] = identifier
 
             result = result.set_index(col_index)
 
@@ -986,6 +984,8 @@ class Intrinio:
             result = result.sort_index(0)
         else:
             result = None
+
+        return result
 
     def get_exchange_prices(self, identifier, date=None):
         """Get all stock prices in an exchange on a certain date
@@ -1008,12 +1008,12 @@ class Intrinio:
 
             Index
             =====
-            Symbol : str
+            symbol : str
                 Stock exchange symbol/ticker of the security
-            EXCHSYM : str
+            exchsym : str
                 Identifier of the Stock Exchange
-            Datetime : `datetime.datime`
-                UTC datetime of the trade day
+            date : `datetime.date`
+                UTC date of the trade day
 
             Columns
             =======
@@ -1054,8 +1054,8 @@ class Intrinio:
 
         if data is not None:
             col_rename = {
-                'ticker': 'Symbol', 'figi': 'FIGI', 'composite_figi': 'CFIGI',
-                'date': 'Datetime', 'figi_ticker': 'FIGI_ticker'
+                'ticker': 'symbol', 'figi': 'figi', 'composite_figi': 'cfigi',
+                'figi_ticker': 'figi_ticker'
             }
 
             col_tonumeric = ['open', 'low', 'high', 'close', 'adj_open',
@@ -1066,23 +1066,20 @@ class Intrinio:
                          'adj_low', 'adj_high', 'adj_close', 'adj_volume',
                          'adj_factor', 'split_ratio', 'ex_dividend']
 
-            col_index = ['Symbol', 'EXCHSYM', 'Datetime']
+            col_index = ['symbol', 'exchsym', 'date']
 
             result = pandas.DataFrame(data).rename(columns=col_rename)
 
-            result['Datetime'] = (
-                result['Datetime'].
-                apply(lambda x: dt.datetime.strptime(x, '%Y-%m-%d')).
-                apply(lambda x: self._apitz.localize(x))
+            result['date'] = (
+                result['date'].
+                apply(lambda x: _set_tz(x, '%Y-%m-%d', self._apitz, self._stz,
+                                        True).date())
             )
-            # Does not make datetime naive
-            result['Datetime'] = pandas.to_datetime(result['Datetime'],
-                                                    utc=True)
 
             result[col_tonumeric] = (result[col_tonumeric].
                                      apply(pandas.to_numeric, errors='coerce'))
 
-            result['EXCHSYM'] = identifier
+            result['exchsym'] = identifier
 
             result = result.set_index(col_index)
 
