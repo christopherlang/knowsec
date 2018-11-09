@@ -48,6 +48,7 @@ def main():
     tables_to_update = ['exchanges', 'securities']
     exchanges = ['ARCX', 'NASDAQ', 'AMEX']
     for a_table in tables_to_update:
+        print(f'Updating table {a_table}')
         rec_search = {'table': a_table, 'update_type': 'full'}
         current_update_rec = DBASE.retrieve_record('update_log', rec_search)
 
@@ -98,6 +99,7 @@ def main():
 
             DBASE.commit()
     # Get last business day prices for exchanges
+    print(f'Downloading last business day prices')
     exchange_prices = [DSOURCE.get_exchange_prices(i, last_day.isoformat())
                        for i in exchanges]
     exchange_prices = functools.reduce(lambda x, y: x.append(y),
@@ -145,6 +147,7 @@ def main():
     sql_bckoff = backoff.jittered_backoff(120, verbose=False)
     nnew_prices = 0
     current_creds = DSOURCE.used_credits
+    print(f'Starting EOD price download and upload')
     for symbol, sec_entry in secpbar:
         secpbar.set_description(f"{symbol}")
         price_log_update = {'symbol': symbol}
