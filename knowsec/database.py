@@ -218,14 +218,13 @@ class StockDB:
         Parameters
         ----------
         tablename : str
-        record: dict or pandas DataFrame
+        record: dict
 
         Raises:
             IntegrityError
                 The new record has keys that already exists in 'tablename'
             TypeError
-                The new record is not of type `dict`,
-                `pandas.core.frame.DateFrame`
+                The new record is not of type `dict`
         """
 
         if isinstance(record, dict):
@@ -234,12 +233,8 @@ class StockDB:
 
             self._dbsession.add(row)
 
-        elif isinstance(record, pd.core.frame.DataFrame):
-            record.to_sql(tablename, self._dbengine, if_exists='append',
-                          index=True)
-
         else:
-            raise TypeError('param: record must be a dict, DataFrame')
+            raise TypeError('param: record must be a dict')
 
     def bulk_insert_records(self, tablename, records):
         """Bulk insert multiple records
@@ -247,23 +242,21 @@ class StockDB:
         Parameters
         ----------
         tablename : str
-        record: list of dict, or pandas DataFrame
+        record: list of dict
 
         Raises:
             IntegrityError
                 The new records has keys that already exists in 'tablename'
             TypeError
-                The new records is not of type `list`,
-                `pandas.core.frame.DateFrame`
+                The new records is not of type `list`
         """
 
         if isinstance(records, list):
             table_class = self.table_class(tablename)
             self._dbsession.bulk_insert_mappings(table_class, records)
 
-        elif isinstance(records, pd.core.frame.DataFrame):
-            records.to_sql(tablename, self._dbengine, if_exists='append',
-                           index=True)
+        else:
+            raise TypeError('param: record must be a list dict')
 
     def update_record(self, tablename, record):
         """Update record in a table by key
