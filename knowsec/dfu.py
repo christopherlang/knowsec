@@ -1167,16 +1167,14 @@ class Intrinio:
 
                     raise ResourceNotFoundError(msg)
 
-                elif job_result.status_code in [429, 500, 503]:
+                elif job_result.status_code == 429:
+                    raise LimitError("Rate limit reached")
+
+                elif job_result.status_code in [500, 503]:
                     waiting_result = waitfun()
 
                     if waiting_result['ntries'] >= self._max_retries:
-                        if job_result.status_code == 429:
-                            msg = job_result.json()['errors']['message']
-
-                            raise LimitError(msg)
-
-                        elif job_result.status_code == 500:
+                        if job_result.status_code == 500:
                             raise ServerError('Resource server error')
 
                         elif job_result.status_code == 503:
