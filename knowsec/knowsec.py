@@ -262,7 +262,6 @@ def main():
                         log_msg = f"Successfully downloaded prices for"
                         log_msg += f" '{symbol}'"
                         LG.log_info(log_msg)
-                        LG.log_info(f'# of new records: {len(price_data)}')
 
                         bckoff(False)
 
@@ -279,6 +278,8 @@ def main():
                     LG.log_info(log_msg)
 
                 else:
+                    LG.log_info(f'# of new records: {len(price_data)}')
+
                     price_data = price_data.rename(columns=prices_colrename)
 
                     price_data = price_data[['open', 'high', 'low',
