@@ -12,7 +12,12 @@ import functools
 import itertools
 import psycopg2
 from sqlalchemy import exc
+import easylog
 
+PVERSION = '0.0.0.9999'
+
+LG = easylog.Easylog(create_console=False)
+LG.add_filelogger('../log/dbupdate.log', True)
 
 with open('../config/config.yaml', 'r') as f:
     CONFIG = yaml.load(f)
@@ -29,6 +34,8 @@ today = today.astimezone(pytz.timezone('US/Eastern'))
 last_day = today - bus_day(n=1)
 last_day = last_day.to_pydatetime()
 
+LG.log_info(f"last complete business day is {last_day.date().isoformat()}")
+
 IDX = pandas.IndexSlice
 
 
@@ -44,16 +51,28 @@ def chunker(iterable, n, fillvalue=None):
 
 
 def main():
+    # Add in some header info for log file
+    LG.log_info(f'knowsec version: {PVERSION}')
+    LG.log_info(f'Date and time: {dt.datetime.utcnow().isoformat()}')
+
     # # Full update exchange and securities table
     tables_to_update = ['exchanges', 'securities']
     exchanges = ['ARCX', 'NASDAQ', 'AMEX']
+
+    LG.log_info(f'Tables to update: {tables_to_update}')
+    LG.log_info(f'Exchanges to update: {exchanges}')
+
     for a_table in tables_to_update:
-        print(f'Updating table {a_table}')
+        LG.log_info(f'Updating table {a_table}')
+
         rec_search = {'table': a_table, 'update_type': 'full'}
         current_update_rec = DBASE.retrieve_record('update_log', rec_search)
 
         should_update = False
         if current_update_rec is not None:
+            LG.log_info(f'Table {a_table} found in database')
+            LG.log_info(f'# of records in table {a_table}: {len(current_update_rec)}')
+
             udt = current_update_rec.reset_index().iloc[[0]]['update_dt']
             udt = udt.tolist()[0]
             seconds_elapsed = (dt.datetime.utcnow() - udt).total_seconds()
@@ -62,6 +81,7 @@ def main():
                 should_update = True
 
         else:
+            LG.log_info(f'Table {a_table} not found in database')
             should_update = True
 
         if should_update is True:
@@ -82,6 +102,8 @@ def main():
 
             used_creds = DSOURCE.used_credits - current_creds
 
+            LG.log_info(f'# of new records in new data: {len(newdata)}')
+
             DBASE.clear_table(a_table)
             DBASE.bulk_insert_records(a_table, newdata)
 
@@ -99,12 +121,15 @@ def main():
 
             DBASE.commit()
     # Get last business day prices for exchanges
-    print(f'Downloading last business day prices')
+    LG.log_info(f'Download last business day prices')
+
     exchange_prices = [DSOURCE.get_exchange_prices(i, last_day.isoformat())
                        for i in exchanges]
     exchange_prices = functools.reduce(lambda x, y: x.append(y),
                                        exchange_prices)
     exchange_prices.sort_index(inplace=True)
+
+    LG.log_info(f'# of new records in last business day prices: {len(exchange_prices)}')
     # TODO generate code for saving this data into Amazon S3
 
     # For EOD Prices, we're mixing AlphaVantage and Intrinio
@@ -147,9 +172,14 @@ def main():
     sql_bckoff = backoff.jittered_backoff(120, verbose=False)
     nnew_prices = 0
     current_creds = DSOURCE.used_credits
-    print(f'Starting EOD price download and upload')
+
+    LG.log_info(f'Starting EOD price download and upload')
+    LG.log_info(f'# of used credits since: {current_creds}')
+
     for symbol, sec_entry in secpbar:
-        secpbar.set_description(f"{symbol}")
+        LG.log_info(f'Symbol being looked into: "{symbol}"')
+
+        secpbar.set_description(f"'{symbol}'")
         price_log_update = {'symbol': symbol}
         new_eod_records = list()
 
@@ -170,8 +200,10 @@ def main():
 
         try:
             existing_rec = existing_securities.loc[IDX[[symbol]], :]
+            LG.log_info(f'"{symbol}" already exists in prices table')
         except KeyError:
             existing_rec = None
+            LG.log_info(f'"{symbol}" does not exists in prices table')
 
         if existing_rec is None:
             # TODO pull all historicals from AlphaVantage
@@ -182,9 +214,18 @@ def main():
             start_date = start_date.to_pydatetime().date()
 
             if max_date >= last_day.date():
+                log_msg = f"'{symbol}' has max date {max_date}"
+                log_msg += f"', which is greater or equal to "
+                log_msg += f"{last_day.date().isoformat()}"
+
+                LG.log_info(log_msg)
                 pass
 
             elif max_date <= dt.date(2018, 8, 1):
+                log_msg = f"'{symbol}' has max date {max_date}"
+                log_msg += f"', which is less or equal to 2018-08-01"
+
+                LG.log_info(log_msg)
                 pass
 
             elif max_date == last_day.date():
@@ -194,36 +235,57 @@ def main():
 
                     new_eod_records.extend(new_rec)
 
+                    log_msg = f"'{symbol}' has max date {max_date}"
+                    log_msg += f"', which is equal to "
+                    log_msg += f"{last_day.date().isoformat()}"
+
+                    LG.log_info(log_msg)
+                    LG.log_info("Should only pull from 'exchange_prices'")
+
                 except KeyError:
                     pass
 
             elif max_date < last_day.date():
                 end_date = last_day.date()
 
+                log_msg = f"'{symbol}' has max date {max_date}"
+                log_msg += f"' less than {last_day.date().isoformat()}"
+                LG.log_info(log_msg)
+                LG.log_info(f"Attempting to download prices for '{symbol}'")
+
                 while True:
                     try:
-                        price_data = DSOURCE.get_prices(symbol, start_date.isoformat(),
+                        price_data = DSOURCE.get_prices(symbol,
+                                                        start_date.isoformat(),
                                                         end_date.isoformat())
+
+                        log_msg = f"Successfully downloaded prices for"
+                        log_msg += f" '{symbol}'"
+                        LG.log_info(log_msg)
+                        LG.log_info(f'# of new records: {len(price_data)}')
 
                         bckoff(False)
 
                         break
 
                     except dfu.LimitError:
-                        raise
+                        break
 
                     except dfu.ServerError:
                         waited = bckoff(True)
 
                 if price_data is None:
-                    pass
+                    log_msg = f"No data found from API for '{symbol}'"
+                    LG.log_info(log_msg)
 
                 else:
                     price_data = price_data.rename(columns=prices_colrename)
 
                     price_data = price_data[['open', 'high', 'low',
-                                             'close', 'volume', 'adjusted_close',
-                                             'split_coefficient', 'dividend_amount']]
+                                             'close', 'volume',
+                                             'adjusted_close',
+                                             'split_coefficient',
+                                             'dividend_amount']]
 
                     new_rec = price_data.reset_index().to_dict('records')
                     new_eod_records.extend(new_rec)
