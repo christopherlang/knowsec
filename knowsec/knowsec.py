@@ -213,7 +213,7 @@ def main():
             start_date = max_date + bus_day(n=1)
             start_date = start_date.to_pydatetime().date()
 
-            if max_date >= last_day.date():
+            if start_date >= last_day.date():
                 log_msg = f"'{symbol}' has max date {max_date}"
                 log_msg += f"', which is greater or equal to "
                 log_msg += f"{last_day.date().isoformat()}"
@@ -221,14 +221,14 @@ def main():
                 LG.log_info(log_msg)
                 pass
 
-            elif max_date <= dt.date(2018, 8, 1):
+            elif start_date <= dt.date(2018, 8, 1):
                 log_msg = f"'{symbol}' has max date {max_date}"
                 log_msg += f"', which is less or equal to 2018-08-01"
 
                 LG.log_info(log_msg)
                 pass
 
-            elif max_date == last_day.date():
+            elif start_date == last_day.date():
                 try:
                     new_rec = exchange_prices.loc[IDX['AMD'], :].iloc[[1]]
                     new_rec = new_rec.reset_index().to_dict('records')
@@ -245,7 +245,7 @@ def main():
                 except KeyError:
                     pass
 
-            elif max_date < last_day.date():
+            elif start_date < last_day.date():
                 end_date = last_day.date()
 
                 log_msg = f"'{symbol}' has max date {max_date}"
@@ -295,8 +295,12 @@ def main():
         price_log_update['check_dt'] = check_time
 
         if new_eod_records:
+            log_msg = f"'{symbol}': found {len(new_eod_records)} new records"
+            LG.log_info(log_msg)
+
             update_time = pytz.timezone('UTC').localize(dt.datetime.utcnow())
             price_log_update['update_dt'] = update_time
+            price_log_update['max_date'] = start_date
 
             for the_exchange in exchs:
                 for record in new_eod_records:
@@ -305,6 +309,9 @@ def main():
 
             while True:
                 try:
+                    log_msg = f"'{symbol}': attemping bulk insert record"
+                    LG.log_info(log_msg)
+
                     DBASE.bulk_insert_records('security_prices',
                                               new_eod_records)
                     sql_bckoff(False)
@@ -314,9 +321,14 @@ def main():
                     break
 
                 except exc.IntegrityError:
+                    log_msg = f"'{symbol}': encountered integrity error"
+                    LG.log_info(log_msg)
+
                     sql_waited = sql_bckoff(True)
                     DBASE.rollback()
 
+                    log_msg = f"'{symbol}': attempting single record inserts"
+                    LG.log_info(log_msg)
                     for new_record in new_eod_records:
                         try:
                             DBASE.insert_record('security_prices', new_record)
