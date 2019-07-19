@@ -72,6 +72,7 @@ class Easylog:
         globallevel : int
             This is the global logging level set during object construction
     """
+
     def __init__(self, loggername=None, globallevel='info',
                  create_console=True):
         """ Easylog constructor
@@ -433,10 +434,10 @@ def _string2loglevel(loglevel):
 
 
 def _logger_record(handler, name, loggertype, loglevel, dateformat):
-        record = {'handler': handler, 'name': name, 'loggertype': loggertype,
-                  'loglevel': loglevel, 'dateformat': dateformat}
+    record = {'handler': handler, 'name': name, 'loggertype': loggertype,
+              'loglevel': loglevel, 'dateformat': dateformat}
 
-        return record
+    return record
 
 
 def _filename_splitter(thepath):

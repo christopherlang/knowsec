@@ -57,7 +57,7 @@ def main():
 
     # # Full update exchange and securities table
     tables_to_update = ['exchanges', 'securities']
-    exchanges = ['ARCX', 'NASDAQ', 'AMEX']
+    exchanges = ['ARCX', 'NYSE', 'NASDAQ', 'AMEX']
 
     LG.log_info(f'Tables to update: {tables_to_update}')
     LG.log_info(f'Exchanges to update: {exchanges}')
@@ -125,6 +125,10 @@ def main():
 
     exchange_prices = [DSOURCE.get_exchange_prices(i, last_day.isoformat())
                        for i in exchanges]
+
+    if all([i is None for i in exchange_prices]):
+        raise TypeError('Last business day failed to retrieve prices')
+
     exchange_prices = functools.reduce(lambda x, y: x.append(y),
                                        exchange_prices)
     exchange_prices.sort_index(inplace=True)
