@@ -619,14 +619,16 @@ class Securities(SQLBASE):
 
 class Exchanges(SQLBASE):
     __tablename__ = 'exchanges'
-    symbol = Column(String, primary_key=True)
+    id = Column(String, primary_key=True)
+    acronym = Column(String, primary_key=True)
     mic = Column(String, primary_key=True)
-    institution_name = Column(String)
-    acronym = Column(String)
+    name = Column(String)
     country = Column(String)
     country_code = Column(String)
     city = Column(String)
     website = Column(String)
+    first_stock_price_date = Column(Date)
+    last_stock_price_date = Column(Date)
 
     def __repr__(self):
         cols = [
