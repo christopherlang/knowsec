@@ -5,7 +5,7 @@ import dfu
 import database
 import tqdm
 import pandas
-from pandas.tseries.frequencies import BDay as bus_day
+from pandas.tseries.offsets import BDay as bus_day
 import datetime as dt
 import pytz
 import functools
