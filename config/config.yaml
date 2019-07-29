@@ -5,5 +5,9 @@ general:
 dbserver:
   uid: titus
   pwd: VDYCDuayE4ckRMcXbNcxWXkjDujABkTd2WyFZJc8HzZazd4rZN4K3SDyw3FrfBep2Gbae6c7nnMgaans6bKvQFxAbMuenjf3crPcM9ktaURrH273EG3CQC4dA
-  host: apollo.c7rp7exuh1rh.us-east-2.rds.amazonaws.com
+  host: apollo.chitk6thgemt.us-east-1.rds.amazonaws.com
   port: 5432
+
+intrinio:
+  api_key: OmRhYzhkZDc0ZTkyMTlhNmI1NmY0ZTEyYjNkODEwYjQ1
+  sandbox_key: OmRhZDIzNTAwZTU3ODI5MDdhOWY2ZjFjN2IyMmQ0NWEy
