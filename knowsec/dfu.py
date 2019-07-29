@@ -12,6 +12,9 @@ import decimal
 from requests.auth import HTTPBasicAuth
 import tqdm
 import backoff
+import intrinio_sdk
+from intrinio_sdk.rest import ApiException
+import backoff
 
 
 STOCKSERIES_COLUMNS = ['open', 'close', 'high', 'low', 'volume']
@@ -1356,6 +1359,255 @@ class LimitError(Error):
     """Exception raised for a resource has reached a limit
 
     Attributes:
+        message -- explanation of the error
+    """
+
+    def __init__(self, message):
+        self.message = message
+
+
+class Intrinio2:
+    def __init__(self, api_key=None, page_size=None, max_retries=20):
+        if api_key is None:
+            api_key = 'OmRhZDIzNTAwZTU3ODI5MDdhOWY2ZjFjN2IyMmQ0NWEy'
+        else:
+            pass
+
+        intrinio_sdk.ApiClient().configuration.api_key['api_key'] = api_key
+
+        self._endpoints = {
+            'exchanges': intrinio_sdk.StockExchangeApi(),
+            'securities': intrinio_sdk.SecurityApi(),
+        }
+
+        self._page_size = page_size if page_size is not None else 1000
+        self._max_retries = max_retries
+
+    def get_exchanges(self, set_index=False, city=None, country=None,
+                      country_code=None, page_size=None):
+        api_endpoint = self._endpoints['exchanges']
+
+        response = self._endpoint_gen(api_endpoint.get_all_stock_exchanges,
+                                      'stock_exchanges',
+                                      city=city,
+                                      country=country,
+                                      country_code=country_code,
+                                      page_size=page_size)
+
+        records = [recs for reschunk in response for recs in reschunk]
+        result = pandas.DataFrame.from_records(records)
+
+        # set the column order
+        colnames = ['id', 'acronym', 'mic', 'name', 'country', 'country_code',
+                    'city', 'website', 'first_stock_price_date',
+                    'last_stock_price_date']
+        result = result[colnames]
+
+        if set_index is True:
+            result = result.set_index(['id', 'acronym', 'mic'])
+
+        return result
+
+    def get_securities(self, set_index=False, exchange_mic=None,
+                       composite_mic='USCOMP', currency='USD', active=True,
+                       delisted=False, page_size=None, **kwargs):
+        kwargs.update({
+            'exchange_mic': exchange_mic,
+            'composite_mic': composite_mic,
+            'currency': currency,
+            'active': active,
+            'delisted': delisted,
+            'page_size': page_size
+        })
+
+        api_endpoint = self._endpoints['securities']
+
+        response = self._endpoint_gen(api_endpoint.get_all_securities,
+                                      'securities', **kwargs)
+
+        records = [recs for reschunk in response for recs in reschunk]
+        result = pandas.DataFrame.from_records(records)
+
+        # set the column order
+        colnames = ['id', 'ticker', 'company_id', 'figi', 'composite_figi',
+                    'composite_ticker', 'name', 'currency', 'share_class_figi',
+                    'code']
+        result = result[colnames]
+
+        if set_index is True:
+            result = result.set_index(['id', 'ticker'])
+
+        return result
+
+    def get_prices_exchange(self, date, identifier='USCOMP', page_size=None):
+        api_endpoint = self._endpoints['exchanges'].get_stock_exchange_prices
+
+        response = self._endpoint_gen(api_endpoint, 'stock_prices',
+                                      identifier=identifier,
+                                      date=date,
+                                      page_size=page_size)
+
+        records = [recs for reschunk in response for recs in reschunk]
+
+        security_prices = pandas.DataFrame.from_records(records)
+        securities = security_prices['security'].tolist()
+        securities = pandas.DataFrame.from_records(securities)
+        security_prices = security_prices.drop('security', 1)
+        nan_boolv = security_prices['volume'].isna()
+
+        security_prices['volume'] = security_prices['volume'].fillna(0)
+        security_prices['volume'] = security_prices['volume'].astype(np.int64)
+        volcol = pandas.Series(security_prices['volume'].values, dtype='Int64')
+        security_prices['volume'] = volcol
+        security_prices.loc[nan_boolv, 'volume'] = None
+
+        securities = securities[['ticker', 'id', 'company_id']]
+        securities = securities.rename(columns={'id': 'security_id'})
+        securities['exchange_mic'] = identifier
+
+        result = pandas.concat([security_prices, securities], axis=1)
+
+        result = result[['ticker', 'security_id', 'company_id', 'exchange_mic',
+                         'date', 'frequency', 'intraperiod', 'open', 'low',
+                         'high', 'close', 'volume', 'adj_open', 'adj_low',
+                         'adj_high', 'adj_close', 'adj_volume']]
+
+        return result
+
+    def security_price(self, identifier, start_date, end_date,
+                       frequency='daily', page_size=None):
+        api_endpoint = self._endpoints['securities'].get_security_stock_prices
+
+        response = self._endpoint_gen(api_endpoint, None,
+                                      identifier=identifier,
+                                      start_date=start_date,
+                                      end_date=end_date,
+                                      frequency=frequency,
+                                      page_size=page_size)
+
+        response = next(response)
+
+        records = response['stock_prices']
+        security_prices = pandas.DataFrame.from_records(records)
+
+        if security_prices.empty is not True:
+            nan_boolv = security_prices['volume'].isna()
+            security_prices['volume'] = security_prices['volume'].fillna(0)
+            security_prices['volume'] = (security_prices['volume'].
+                                         astype(np.int64))
+            volcol = pandas.Series(security_prices['volume'].values,
+                                   dtype='Int64')
+            security_prices['volume'] = volcol
+            security_prices.loc[nan_boolv, 'volume'] = None
+
+            security_meta = response['security']
+            security_prices['ticker'] = security_meta['ticker']
+            security_prices['security_id'] = security_meta['id']
+            security_prices['company_id'] = security_meta['company_id']
+
+            result = security_prices[['ticker', 'security_id', 'company_id',
+                                      'date', 'frequency', 'intraperiod',
+                                      'open', 'low', 'high', 'close', 'volume',
+                                      'adj_open', 'adj_low', 'adj_high',
+                                      'adj_close', 'adj_volume']]
+
+        else:
+            result = security_prices
+
+        return result
+
+    def historic_data(self, identifier, start_date, end_date,
+                      tag='adj_close_price', frequency='daily', type=None,
+                      sort_order='desc', page_size=None):
+        api_endpoint = self._endpoints['securities']
+        api_endpoint = api_endpoint.get_security_historical_data
+
+        response = self._endpoint_gen(api_endpoint, 'historical_data',
+                                      identifier=identifier,
+                                      start_date=start_date,
+                                      end_date=end_date,
+                                      tag=tag,
+                                      frequency=frequency,
+                                      type=type,
+                                      sort_order=sort_order,
+                                      page_size=page_size)
+
+        records = [recs for reschunk in response for recs in reschunk]
+        historic_records = pandas.DataFrame.from_records(records)
+
+        return historic_records
+
+    def _endpoint_gen(self, api_endpoint, value_key, has_paging=True,
+                      page_size=None, max_retries=None, **kwargs):
+        kwargs = {k: v for k, v in kwargs.items() if v is not None}
+        next_page_str = ''
+
+        if page_size is None:
+            kwargs['page_size'] = self._page_size
+
+        def response_value(value_key, kwargs, next_page_str, max_retries):
+            bkoff = backoff.jittered_backoff(60, verbose=False)
+            errors_caught = dict.fromkeys([429, 500, 503, 401, 403, 404], 0)
+            n_retries = 0
+
+            if max_retries is None:
+                max_retries = self._max_retries
+
+            while True:
+                try:
+                    if n_retries >= max_retries:
+                        msg = f"max retries {max_retries} reached"
+                        raise RetryLimitError(msg)
+
+                    api_response = api_endpoint(**kwargs)
+                    api_content = api_response.to_dict()
+                    bkoff(False)
+
+                    if value_key is None:
+                        yield api_content
+
+                    else:
+                        yield api_content[value_key]
+
+                    if ('next_page' not in api_content.keys() or
+                            api_content['next_page'] is None):
+                        break
+
+                    else:
+                        kwargs['next_page'] = api_content['next_page']
+
+                except ApiException as api_error:
+                    if api_error.status in (429, 500, 503):
+                        bkoff(True)
+                        n_retries += 1
+
+                    else:
+                        raise api_error
+
+                    errors_caught[api_error.status] += 0
+
+                except KeyError:
+                    pass
+
+                except RetryLimitError as retry_error:
+                    raise retry_error
+
+        endpoint_generator = response_value(value_key, kwargs, next_page_str,
+                                            self._max_retries)
+
+        return endpoint_generator
+
+
+class Error(Exception):
+    """Base class for exceptions in this module."""
+    pass
+
+
+class RetryLimitError(Error):
+    """Exception for when maximum retries is reached
+
+    Attributes:
+        expression -- input expression in which the error occurred
         message -- explanation of the error
     """
 

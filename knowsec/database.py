@@ -60,6 +60,9 @@ class StockDB:
     def commit(self):
         self._dbsession.commit()
 
+    def flush(self):
+        self._dbsession.flush()
+
     def close(self):
         self._dbsession.close()
 
@@ -281,11 +284,11 @@ class StockDB:
         filter_clause = list()
         for pkey in table_keys:
             filter_clause.append(table_cols[pkey] == record[pkey])
-            del record_insert[pkey]
+            # del record_insert[pkey]
 
         query_obj = self._dbsession.query(table_class).filter(*filter_clause)
 
-        query_obj.update(record_insert)
+        query_obj.update(record_insert, False)
 
     def update_records(self, tablename, records):
         """Update multiple records in a table by key
@@ -586,30 +589,30 @@ class NoTableError(Error):
 
 class Securities(SQLBASE):
     __tablename__ = 'securities'
-    symbol = Column(String, primary_key=True)
-    figi = Column(String, primary_key=True)
-    exchange = Column(String, primary_key=True)
-    security_name = Column(String)
-    security_type = Column(String)
-    primary_security = Column(String)
+
+    id = Column(String, primary_key=True)
+    ticker = Column(String, primary_key=True)
+    company_id = Column(String)
+    figi = Column(String)
+    composite_figi = Column(String)
+    composite_ticker = Column(String)
+    name = Column(String)
     currency = Column(String)
-    market_sector = Column(String)
-    figi_ticker = Column(String)
-    cfigi_ticker = Column(String)
-    delisted_security = Column(Boolean)
-    last_crsp_adj_date = Column(Date)
+    share_class_figi = Column(String)
+    code = Column(String)
 
     def __repr__(self):
         cols = [
-            f"symbol='{self.Symbol}'",
-            f"figi='{self.FIGI}'",
-            f"exchange='{self.Exchange}'",
-            f"security_name='{self.security_name}'",
-            f"security_type='{self.security_type}'",
-            f"primary_security='{self.primary_security}'",
+            f"id='{self.id}'",
+            f"ticker='{self.ticker}'",
+            f"company_id='{self.company_id}'",
+            f"figi='{self.figi}'",
+            f"composite_figi='{self.composite_figi}'",
+            f"composite_ticker='{self.composite_ticker}'",
+            f"name='{self.name}'",
             f"currency='{self.currency}'",
-            f"market_sector='{self.market_sector}'"
-            f"figi_ticker='{self.FIGI_ticker}'"
+            f"share_class_figi='{self.share_class_figi}'",
+            f"code='{self.code}'"
         ]
 
         repr_statement = ", ".join(cols)
@@ -620,8 +623,8 @@ class Securities(SQLBASE):
 class Exchanges(SQLBASE):
     __tablename__ = 'exchanges'
     id = Column(String, primary_key=True)
-    acronym = Column(String, primary_key=True)
     mic = Column(String, primary_key=True)
+    acronym = Column(String)
     name = Column(String)
     country = Column(String)
     country_code = Column(String)
@@ -632,14 +635,16 @@ class Exchanges(SQLBASE):
 
     def __repr__(self):
         cols = [
-            f"symbol='{self.Symbol}'",
-            f"mic='{self.MIC}'",
-            f"institution_name='{self.institution_name}'",
+            f"id='{self.id}'",
+            f"mic='{self.mic}'",
             f"acronym='{self.acronym}'",
+            f"name='{self.name}'",
             f"country='{self.country}'",
             f"country_code='{self.country_code}'",
             f"city='{self.city}'",
-            f"website='{self.website}'"
+            f"website='{self.website}'",
+            f"first_stock_price_date='{self.first_stock_price_date}'",
+            f"last_stock_price_date='{self.last_stock_price_date}'"
         ]
 
         repr_statement = ", ".join(cols)
@@ -649,28 +654,37 @@ class Exchanges(SQLBASE):
 
 class Prices(SQLBASE):
     __tablename__ = 'security_prices'
-    symbol = Column(String, primary_key=True)
-    exchange = Column(String, primary_key=True)
+    ticker = Column(String, primary_key=True)
     date = Column(Date, primary_key=True)
+    frequency = Column(String, primary_key=True)
+    intraperiod = Column(String, primary_key=True)
     open = Column(Numeric)
-    high = Column(Numeric)
     low = Column(Numeric)
+    high = Column(Numeric)
     close = Column(Numeric)
     volume = Column(BigInteger)
-    adjusted_close = Column(Numeric)
-    dividend_amount = Column(Numeric)
-    split_coefficient = Column(Numeric)
+    adj_open = Column(Numeric)
+    adj_low = Column(Numeric)
+    adj_high = Column(Numeric)
+    adj_close = Column(Numeric)
+    adj_volume = Column(Numeric)
 
     def __repr__(self):
         cols = [
-            f"symbol='{self.Symbol}'",
-            f"exchange='{self.Exchange}'",
-            f"date='{self.Date}'",
+            f"ticker='{self.ticker}'",
+            f"date='{self.date}'",
+            f"frequency='{self.frequency}'",
+            f"intraperiod='{self.intraperiod}'",
             f"open='{self.open}'",
-            f"high='{self.high}'",
             f"low='{self.low}'",
+            f"high='{self.high}'",
             f"close='{self.close}'",
-            f"volume='{self.volume}'"
+            f"volume='{self.volume}'",
+            f"adj_open='{self.adj_open}'",
+            f"adj_low='{self.adj_low}'",
+            f"adj_high='{self.adj_high}'",
+            f"adj_close='{self.adj_close}'",
+            f"adj_volume='{self.adj_volume}'"
         ]
 
         repr_statement = ", ".join(cols)
@@ -680,11 +694,24 @@ class Prices(SQLBASE):
 
 class EODPrices_log(SQLBASE):
     __tablename__ = 'prices_log'
-    symbol = Column(String, primary_key=True)
+    ticker = Column(String, primary_key=True)
     min_date = Column(Date)
     max_date = Column(Date)
     update_dt = Column(DateTime(timezone=True))
     check_dt = Column(DateTime(timezone=True))
+
+    def __repr__(self):
+        cols = [
+            f"ticker={self.ticker}"
+            f"min_date={self.min_date}"
+            f"max_date={self.max_date}"
+            f"update_dt={self.update_dt}"
+            f"check_dt={self.check_dt}"
+        ]
+
+        repr_statement = ", ".join(cols)
+
+        return "<EODPrices_log({})>".format(repr_statement)
 
 
 class Update_log(SQLBASE):
