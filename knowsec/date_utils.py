@@ -2,36 +2,40 @@ from datetime import datetime as dt
 from datetime import timedelta
 from pandas.tseries.offsets import BDay as bus_day
 import pytz
+import re
 
 
-def today_utc(add_tz=True):
+def timezones(regex_q='^US|(^UTC$)', ignore_case=False):
+    regex_flag = re.I if ignore_case else 0
+    return [i for i in pytz.all_timezones if re.search(regex_q, i, regex_flag)]
+
+
+def today_utc():
     result = dt.utcnow()
-
-    if add_tz is True:
-        result = pytz.utc.localize(result)
 
     return result.date()
 
 
-def today_dt_utc(add_tz=True):
-    result = dt.utcnow()
-
-    if add_tz is True:
-        result = pytz.utc.localize(result)
-
-    return result
-
-def now_utc(add_tz=True):
-    result = dt.utcnow()
-
-    if add_tz is True:
-        result = pytz.utc.localize(result)
-
-    return result
+def today(timezone='US/Eastern'):
+    return now(timezone=timezone).date()
 
 
-def last_business_day(local=True, n=1, add_tz=True):
-    return (today_utc(local, add_tz) - bus_day(n=n)).to_pydatetime().date()
+def now_utc():
+    return pytz.utc.localize(dt.utcnow())
+
+
+def now(timezone='US/Eastern'):
+    to_tz = pytz.timezone(timezone)
+    return now_utc().astimezone(to_tz)
+
+
+def last_busday_utc():
+    return (today_utc() - bus_day(n=1)).to_pydatetime().date()
+
+
+def last_busday(timezone='US/Eastern'):
+    result = (today(timezone) - bus_day(n=1)).to_pydatetime()
+    return result.date()
 
 
 def shift(date_time, n=1, unit='day', shift_backwards=True):
