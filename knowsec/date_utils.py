@@ -1,4 +1,4 @@
-from datetime import datetime as dt
+import datetime
 from datetime import timedelta
 from pandas.tseries.offsets import BDay as bus_day
 import pytz
@@ -11,7 +11,7 @@ def timezones(regex_q='^US|(^UTC$)', ignore_case=False):
 
 
 def today_utc():
-    result = dt.utcnow()
+    result = datetime.datetime.utcnow()
 
     return result.date()
 
@@ -21,7 +21,7 @@ def today(timezone='US/Eastern'):
 
 
 def now_utc():
-    return pytz.utc.localize(dt.utcnow())
+    return pytz.utc.localize(datetime.datetime.utcnow())
 
 
 def now(timezone='US/Eastern'):
@@ -80,5 +80,8 @@ def shift(date_time, n=1, unit='day', shift_backwards=True):
             result = (date_time - dt_obj).to_pydatetime()
         else:
             result = (date_time + dt_obj).to_pydatetime()
+
+        if type(date_time) is datetime.date:
+            result = result.date()
 
     return result
