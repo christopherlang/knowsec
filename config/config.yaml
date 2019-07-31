@@ -1,6 +1,5 @@
 general:
-  startdate: 1980-01-01
-  enddate: null
+  max_retries_intrinio: 20
 
 dbserver:
   uid: titus
