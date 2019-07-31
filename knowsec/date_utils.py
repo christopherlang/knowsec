@@ -38,6 +38,14 @@ def last_busday(timezone='US/Eastern'):
     return result.date()
 
 
+def lead(date_time, n=1, unit='day'):
+    return shift(date_time, n, unit, False)
+
+
+def lag(date_time, n=1, unit='day'):
+    return shift(date_time, n, unit, True)
+
+
 def shift(date_time, n=1, unit='day', shift_backwards=True):
     if unit == 'year':
         dt_obj = timedelta(days=365 * n)
