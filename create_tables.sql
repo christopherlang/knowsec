@@ -51,6 +51,8 @@ CREATE TABLE public.security_prices
     PRIMARY KEY (ticker, date, frequency, intraperiod)
 )
 
+-- Code for droping and recreating the prices_log table
+DROP TABLE public.prices_log;
 
 CREATE TABLE public.prices_log
 (
@@ -59,12 +61,11 @@ CREATE TABLE public.prices_log
     max_date DATE NOT NULL,
     update_dt TIMESTAMPTZ,
     check_dt TIMESTAMPTZ
-)
-
+);
 
 INSERT INTO prices_log (ticker, min_date, max_date)
 SELECT ticker,
        MIN(date) as min_date,
        MAX(date) as max_date
     FROM security_prices
-    GROUP BY ticker
+    GROUP BY ticker;
