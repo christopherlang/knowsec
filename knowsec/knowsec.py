@@ -6,6 +6,7 @@ import database
 import tqdm
 import date_utils as dateut
 import pytz
+import datetime
 from sqlalchemy.exc import IntegrityError
 import easylog
 import pandas
@@ -31,6 +32,7 @@ TODAYET = dateut.today()
 def main():
     # main level objects for use ====
     backoff_wait = backoff.jittered_backoff(60, verbose=False)
+    price_col_drop = ['security_id', 'company_id']
 
     # Update exchanges table ====
     # exchanges_tab = DSOURCE.get_exchanges()
@@ -44,22 +46,31 @@ def main():
     # DBASE.replace_table('securities', securities_records)
     # DBASE.commit()
 
-    # Pull all securities for 'USCOMP' for latest business day ====
-
     # Pull reference tables ====
     all_securities = DBASE.slice_table('securities')
     all_tickers = set(all_securities.index.get_level_values(1))
     security_logs = DBASE.slice_table('prices_log')
 
     queries = query_generator(all_tickers, security_logs)
+    queries = list(queries)
+    n_today_query = sum([s == TODAYET and e == TODAYET for t, s, e in queries])
+
+    if n_today_query > 0:
+        # Pull all securities for 'USCOMP' for latest business day ====
+        latest_prices = DSOURCE.get_prices_exchange(TODAYET)
+        latest_prices = latest_prices.drop(columns=['exchange_mic'])
+
+        print(f"# of latest business queries: {n_today_query}")
+
+    else:
+        latest_prices = None
 
     # Loop setup --
-    update_pb = tqdm.tqdm(queries, ncols=80, total=len(all_tickers))
+    update_pb = tqdm.tqdm(queries, ncols=80)
 
     price_log_template = DBASE.table_columns('prices_log')
     price_log_template = {k: None for k in price_log_template}
 
-    price_col_drop = ['security_id', 'company_id']
     # Loop setup end --
 
     for ticker, sdate, edate in update_pb:
@@ -69,22 +80,27 @@ def main():
         found_sec = False
         new_rec_inserted = False
 
-        while True:
-            try:
-                eod_prices = DSOURCE.security_price(ticker, sdate, edate)
+        if sdate == TODAYET and edate == TODAYET:
+            # TODO implement soon after getting last business day
+            eod_prices = latest_prices[latest_prices['ticker'] == ticker]
 
-                break
-
-            except dfu.ApiException:
-                n_retries += 1
-
-                if n_retries >= CONFIG['general']['max_retries_intrinio']:
-                    skip_ticker = True
+        else:
+            while True:
+                try:
+                    eod_prices = DSOURCE.security_price(ticker, sdate, edate)
 
                     break
 
-                else:
-                    backoff_wait()
+                except dfu.ApiException:
+                    n_retries += 1
+
+                    if n_retries >= CONFIG['general']['max_retries_intrinio']:
+                        skip_ticker = True
+
+                        break
+
+                    else:
+                        backoff_wait()
 
         if skip_ticker is True:
             continue
@@ -191,7 +207,8 @@ def main():
 
             DBASE.insert_record('prices_log', update_log)
 
-        elif (found_sec and new_rec_inserted is False) and sec_in_logs is False:
+        elif ((found_sec and new_rec_inserted is False) and
+                sec_in_logs is False):
             where_statement = {'ticker': update_log['ticker']}
             ticker_data = DBASE.slice_table('security_prices',
                                             filters=where_statement,
@@ -204,20 +221,6 @@ def main():
                           'check_dt': update_log['check_dt']}
 
             DBASE.insert_record('prices_log', update_log)
-
-        # Update the prices_log table
-        # if sec_in_logs is True:
-        #     update_log = {k: v for k, v in update_log.items() if v is not None}
-        #     DBASE.update_record('prices_log', update_log)
-
-        # else:
-        #     # If security not in 'prices_log' table, it should not be in the
-        #     # 'security_prices' table either. Therefore, pass on the log update
-        #     if eod_prices.empty is True:
-        #         pass
-
-        #     else:
-        #         DBASE.insert_record('prices_log', update_log)
 
         DBASE.commit()
 
@@ -247,3 +250,11 @@ def query_generator(tickers, sec_logs):
 class DuplicationError(Exception):
     def __init__(self, message):
         self.message = message
+
+
+if __name__ == '__main__':
+    if dateut.is_business_day(TODAYET):
+        if dateut.now().time() >= datetime.time(17, 0, 0):
+            main()
+
+    sys.exit()
