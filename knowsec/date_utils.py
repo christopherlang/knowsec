@@ -1,8 +1,10 @@
 import datetime
 from datetime import timedelta
-from pandas.tseries.offsets import BDay as bus_day
+import pandas
 import pytz
 import re
+
+_BUSDAYOFFSET = pandas.tseries.offsets.BDay
 
 
 def timezones(regex_q='^US|(^UTC$)', ignore_case=False):
@@ -30,12 +32,16 @@ def now(timezone='US/Eastern'):
 
 
 def last_busday_utc():
-    return (today_utc() - bus_day(n=1)).to_pydatetime().date()
+    return (today_utc() - _BUSDAYOFFSET(n=1)).to_pydatetime().date()
 
 
 def last_busday(timezone='US/Eastern'):
-    result = (today(timezone) - bus_day(n=1)).to_pydatetime()
+    result = (today(timezone) - _BUSDAYOFFSET(n=1)).to_pydatetime()
     return result.date()
+
+
+def is_business_day(date):
+    return bool(len(pandas.bdate_range(date, date)))
 
 
 def lead(date_time, n=1, unit='day'):
@@ -54,7 +60,7 @@ def shift(date_time, n=1, unit='day', shift_backwards=True):
         dt_obj = timedelta(days=n)
 
     elif unit == 'busday':
-        dt_obj = bus_day(n=n)
+        dt_obj = _BUSDAYOFFSET(n=n)
 
     elif unit == ' week':
         dt_obj = timedelta(weeks=n)
