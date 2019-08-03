@@ -590,7 +590,7 @@ class NoTableError(Error):
 class Securities(SQLBASE):
     __tablename__ = 'securities'
 
-    id = Column(String, primary_key=True)
+    secid = Column(String, primary_key=True)
     ticker = Column(String, primary_key=True)
     company_id = Column(String)
     figi = Column(String)
@@ -603,7 +603,7 @@ class Securities(SQLBASE):
 
     def __repr__(self):
         cols = [
-            f"id='{self.id}'",
+            f"secid='{self.secid}'",
             f"ticker='{self.ticker}'",
             f"company_id='{self.company_id}'",
             f"figi='{self.figi}'",
@@ -622,7 +622,7 @@ class Securities(SQLBASE):
 
 class Exchanges(SQLBASE):
     __tablename__ = 'exchanges'
-    id = Column(String, primary_key=True)
+    excid = Column(String, primary_key=True)
     mic = Column(String, primary_key=True)
     acronym = Column(String)
     name = Column(String)
@@ -635,7 +635,7 @@ class Exchanges(SQLBASE):
 
     def __repr__(self):
         cols = [
-            f"id='{self.id}'",
+            f"excid='{self.excid}'",
             f"mic='{self.mic}'",
             f"acronym='{self.acronym}'",
             f"name='{self.name}'",
@@ -654,7 +654,7 @@ class Exchanges(SQLBASE):
 
 class Prices(SQLBASE):
     __tablename__ = 'security_prices'
-    ticker = Column(String, primary_key=True)
+    secid = Column(String, primary_key=True)
     date = Column(Date, primary_key=True)
     frequency = Column(String, primary_key=True)
     intraperiod = Column(String, primary_key=True)
@@ -671,7 +671,7 @@ class Prices(SQLBASE):
 
     def __repr__(self):
         cols = [
-            f"ticker='{self.ticker}'",
+            f"secid='{self.secid}'",
             f"date='{self.date}'",
             f"frequency='{self.frequency}'",
             f"intraperiod='{self.intraperiod}'",
@@ -694,7 +694,7 @@ class Prices(SQLBASE):
 
 class EODPrices_log(SQLBASE):
     __tablename__ = 'prices_log'
-    ticker = Column(String, primary_key=True)
+    secid = Column(String, primary_key=True)
     min_date = Column(Date)
     max_date = Column(Date)
     update_dt = Column(DateTime(timezone=True))
@@ -702,7 +702,7 @@ class EODPrices_log(SQLBASE):
 
     def __repr__(self):
         cols = [
-            f"ticker={self.ticker}"
+            f"secid={self.secid}"
             f"min_date={self.min_date}"
             f"max_date={self.max_date}"
             f"update_dt={self.update_dt}"

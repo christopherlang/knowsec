@@ -1367,7 +1367,7 @@ class LimitError(Error):
 
 
 class Intrinio2:
-    def __init__(self, api_key=None, page_size=None, max_retries=20):
+    def __init__(self, api_key=None, page_size=None, max_retries=100):
         if api_key is None:
             api_key = 'OmRhZDIzNTAwZTU3ODI5MDdhOWY2ZjFjN2IyMmQ0NWEy'
         else:
@@ -1402,9 +1402,10 @@ class Intrinio2:
                     'city', 'website', 'first_stock_price_date',
                     'last_stock_price_date']
         result = result[colnames]
+        result = result.rename(columns={'id': 'excid'})
 
         if set_index is True:
-            result = result.set_index(['id', 'acronym', 'mic'])
+            result = result.set_index(['excid', 'acronym', 'mic'])
 
         return result
 
@@ -1433,9 +1434,10 @@ class Intrinio2:
                     'composite_ticker', 'name', 'currency', 'share_class_figi',
                     'code']
         result = result[colnames]
+        result = result.rename(columns={'id': 'secid'})
 
         if set_index is True:
-            result = result.set_index(['id', 'ticker'])
+            result = result.set_index(['secid', 'ticker'])
 
         return result
 
@@ -1462,12 +1464,12 @@ class Intrinio2:
         security_prices.loc[nan_boolv, 'volume'] = None
 
         securities = securities[['ticker', 'id', 'company_id']]
-        securities = securities.rename(columns={'id': 'security_id'})
+        securities = securities.rename(columns={'id': 'secid'})
         securities['exchange_mic'] = identifier
 
         result = pandas.concat([security_prices, securities], axis=1)
 
-        result = result[['ticker', 'security_id', 'company_id', 'exchange_mic',
+        result = result[['ticker', 'secid', 'company_id', 'exchange_mic',
                          'date', 'frequency', 'intraperiod', 'open', 'low',
                          'high', 'close', 'volume', 'adj_open', 'adj_low',
                          'adj_high', 'adj_close', 'adj_volume']]
@@ -1484,10 +1486,11 @@ class Intrinio2:
                                       end_date=end_date,
                                       frequency=frequency,
                                       page_size=page_size)
+        response = list(response)
+        records = [recs['stock_prices'] for recs in response]
+        records = [recs for reschunk in records for recs in reschunk]
 
-        response = next(response)
-
-        records = response['stock_prices']
+        # records = response['stock_prices']
         security_prices = pandas.DataFrame.from_records(records)
 
         if security_prices.empty is not True:
@@ -1500,7 +1503,7 @@ class Intrinio2:
             security_prices['volume'] = volcol
             security_prices.loc[nan_boolv, 'volume'] = None
 
-            security_meta = response['security']
+            security_meta = response[0]['security']
             security_prices['ticker'] = security_meta['ticker']
             security_prices['security_id'] = security_meta['id']
             security_prices['company_id'] = security_meta['company_id']
@@ -1510,9 +1513,31 @@ class Intrinio2:
                                       'open', 'low', 'high', 'close', 'volume',
                                       'adj_open', 'adj_low', 'adj_high',
                                       'adj_close', 'adj_volume']]
+            result = result.rename(columns={'security_id': 'secid'})
 
         else:
             result = security_prices
+
+        return result
+
+    def security_lookup(self, identifier):
+        api_endpoint = self._endpoints['securities'].get_security_by_id
+
+        response = self._endpoint_gen(api_endpoint, None, False,
+                                      identifier=identifier)
+
+        result = pandas.DataFrame.from_records(list(response))
+        result = result[['id', 'company_id', 'name', 'type', 'code',
+                         'share_class', 'currency', 'round_lot_size',
+                         'ticker', 'exchange_ticker', 'composite_ticker',
+                         'alternate_tickers', 'figi', 'cik', 'composite_figi',
+                         'share_class_figi', 'figi_uniqueid', 'active', 'etf',
+                         'delisted', 'primary_listing', 'primary_security',
+                         'first_stock_price', 'last_stock_price',
+                         'last_stock_price_adjustment',
+                         'last_corporate_action', 'previous_tickers',
+                         'listing_exchange_mic']]
+        result = result.rename(columns={'id': 'secid'})
 
         return result
 
@@ -1542,11 +1567,11 @@ class Intrinio2:
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
         next_page_str = ''
 
-        if page_size is None:
+        if page_size is None and has_paging:
             kwargs['page_size'] = self._page_size
 
         def response_value(value_key, kwargs, next_page_str, max_retries):
-            bkoff = backoff.jittered_backoff(60, verbose=False)
+            bkoff = backoff.jittered_backoff(300, verbose=False)
             errors_caught = dict.fromkeys([429, 500, 503, 401, 403, 404], 0)
             n_retries = 0
 

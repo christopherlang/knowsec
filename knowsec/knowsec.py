@@ -26,13 +26,13 @@ with open('../config/config.yaml', 'r') as f:
     constr = database.constr_postgres(**knowsec_creds)
     DBASE = database.StockDB(constr)
 
-TODAYET = dateut.today()
+TODAYET = dateut.lag(dateut.today())
 
 
 def main():
     # main level objects for use ====
     backoff_wait = backoff.jittered_backoff(60, verbose=False)
-    price_col_drop = ['security_id', 'company_id']
+    price_col_drop = ['ticker', 'company_id']
 
     # Update exchanges table ====
     # exchanges_tab = DSOURCE.get_exchanges()
@@ -48,10 +48,10 @@ def main():
 
     # Pull reference tables ====
     all_securities = DBASE.slice_table('securities')
-    all_tickers = set(all_securities.index.get_level_values(1))
+    all_sec_id = set(all_securities.index.get_level_values(0))
     security_logs = DBASE.slice_table('prices_log')
 
-    queries = query_generator(all_tickers, security_logs)
+    queries = query_generator(all_sec_id, security_logs)
     queries = list(queries)
     n_today_query = sum([s == TODAYET and e == TODAYET for t, s, e in queries])
 
@@ -73,7 +73,7 @@ def main():
 
     # Loop setup end --
 
-    for ticker, sdate, edate in update_pb:
+    for secid, sdate, edate in update_pb:
         n_retries = 0
         skip_ticker = False
 
@@ -82,12 +82,12 @@ def main():
 
         if sdate == TODAYET and edate == TODAYET:
             # TODO implement soon after getting last business day
-            eod_prices = latest_prices[latest_prices['ticker'] == ticker]
+            eod_prices = latest_prices[latest_prices['secid'] == secid]
 
         else:
             while True:
                 try:
-                    eod_prices = DSOURCE.security_price(ticker, sdate, edate)
+                    eod_prices = DSOURCE.security_price(secid, sdate, edate)
 
                     break
 
@@ -106,23 +106,30 @@ def main():
             continue
 
         update_log = price_log_template.copy()
-        update_log['ticker'] = ticker
+        update_log['secid'] = secid
         update_log['check_dt'] = dateut.now_utc()
 
-        sec_in_logs = security_logs.iloc[security_logs.index == ticker].empty
-        sec_in_logs = not sec_in_logs
+        try:
+            sec_in_logs = security_logs.iloc[security_logs.index == secid].empty
+            sec_in_logs = not sec_in_logs
+
+        except AttributeError:
+            sec_in_logs = False
 
         # security_logs.iloc[security_logs.index == ticker]
         if eod_prices.empty is not True:
             found_sec = True
-            update_log['ticker'] = eod_prices['ticker'].unique().item()
+            update_log['secid'] = eod_prices['secid'].unique().item()
 
             eod_prices = eod_prices.drop(columns=price_col_drop)
             eod_price_recs = eod_prices.to_dict('records')
 
             for a_rec in eod_price_recs:
-                if a_rec['volume'] is not None:
+                if (a_rec['volume'] is not None and
+                        pandas.isna(a_rec['volume']) is False):
                     a_rec['volume'] = int(a_rec['volume'])
+                elif pandas.isna(a_rec['volume']) is True:
+                    a_rec['volume'] = None
 
             try:
                 DBASE.bulk_insert_records('security_prices', eod_price_recs)
@@ -186,7 +193,7 @@ def main():
         elif (found_sec and new_rec_inserted is False) and sec_in_logs:
             # Security retrieved new EOD, but no records inserted (Key errors)
             # and security exists in logs table
-            update_log = {'ticker': ticker,
+            update_log = {'secid': secid,
                           'check_dt': update_log['check_dt']}
 
             DBASE.update_record('prices_log', update_log)
@@ -194,14 +201,22 @@ def main():
         elif (found_sec and new_rec_inserted) and sec_in_logs is False:
             # Security retrieved new EOD, records were inserted, but security
             # does not exists in logs table
-            where_statement = {'ticker': update_log['ticker']}
+            where_statement = {'secid': update_log['secid']}
             ticker_data = DBASE.slice_table('security_prices',
                                             filters=where_statement,
                                             index_keys=False)
 
-            update_log = {'ticker': ticker,
-                          'min_date': ticker_data['date'].min(),
-                          'max_date': ticker_data['date'].max(),
+            if ticker_data is None:
+                min_date_sec = eod_prices['date'].min()
+                max_date_sec = eod_prices['date'].max()
+
+            else:
+                min_date_sec = ticker_data['date'].min()
+                min_date_sec = ticker_data['date'].max()
+
+            update_log = {'secid': secid,
+                          'min_date': min_date_sec,
+                          'max_date': min_date_sec,
                           'update_dt': update_log['update_dt'],
                           'check_dt': update_log['check_dt']}
 
@@ -214,9 +229,17 @@ def main():
                                             filters=where_statement,
                                             index_keys=False)
 
-            update_log = {'ticker': ticker,
-                          'min_date': ticker_data['date'].min(),
-                          'max_date': ticker_data['date'].max(),
+            if ticker_data is None:
+                min_date_sec = eod_prices['date'].min()
+                max_date_sec = eod_prices['date'].max()
+
+            else:
+                min_date_sec = ticker_data['date'].min()
+                min_date_sec = ticker_data['date'].max()
+
+            update_log = {'secid': secid,
+                          'min_date': min_date_sec,
+                          'max_date': max_date_sec,
                           'update_dt': None,
                           'check_dt': update_log['check_dt']}
 
@@ -227,7 +250,11 @@ def main():
 
 def query_generator(tickers, sec_logs):
     for ticker in tickers:
-        ticker_log = sec_logs.iloc[sec_logs.index == ticker]
+        if sec_logs is not None:
+            ticker_log = sec_logs.iloc[sec_logs.index == ticker]
+
+        else:
+            ticker_log = pandas.DataFrame()
 
         if ticker_log.empty is True:
             query = (ticker, dateut.lag(TODAYET, 50, 'year'), TODAYET)
