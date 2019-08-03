@@ -15,6 +15,39 @@ CREATE TABLE public.securities
     PRIMARY KEY (id, ticker)
 )
 
+CREATE TABLE public.securities
+(
+    id VARCHAR(100) NOT NULL PRIMARY KEY,
+    company_id VARCHAR(100),
+    name VARCHAR(250),
+    type VARCHAR(100),
+    code VARCHAR(100),
+    share_class VARCHAR(100),
+    currency VARCHAR(100),
+    round_lot_size DECIMAL(20, 6),
+    ticker VARCHAR(100),
+    exchange_ticker VARCHAR(100),
+    composite_ticker VARCHAR(100),
+    alternate_tickers VARCHAR(100)[],
+    figi VARCHAR(100),
+    cik VARCHAR(100),
+    composite_figi VARCHAR(100),
+    share_class_figi VARCHAR(100),
+    figi_uniqueid VARCHAR(100),
+    active BOOLEAN,
+    etf BOOLEAN,
+    delisted BOOLEAN,
+    primary_listing BOOLEAN,
+    primary_security BOOLEAN,
+    first_stock_price date,
+    last_stock_price date,
+    last_stock_price_adjustment date,
+    last_corporate_action date,
+    previous_tickers VARCHAR(100)[],
+    listing_exchange_mic VARCHAR(100)
+)
+
+
 
 CREATE TABLE public.exchanges
 (
