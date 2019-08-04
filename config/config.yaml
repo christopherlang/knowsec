@@ -1,5 +1,7 @@
 general:
   max_retries_intrinio: 20
+  commit_database: True
+  ignore_time: True
 
 dbserver:
   uid: titus
@@ -10,3 +12,7 @@ dbserver:
 intrinio:
   api_key: OmRhYzhkZDc0ZTkyMTlhNmI1NmY0ZTEyYjNkODEwYjQ1
   sandbox_key: OmRhZDIzNTAwZTU3ODI5MDdhOWY2ZjFjN2IyMmQ0NWEy
+
+S3:
+  aws_access_key_id: AKIAU2WSHAXZR6LZLQMQ
+  aws_secret_access_key: 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
