@@ -3,6 +3,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Float, String, DateTime, Date, Integer, BigInteger, Numeric, Boolean
 import sqlalchemy_utils as sql_utils
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
 import pandas as pd
 import datetime as dt
 import itertools
@@ -45,7 +46,8 @@ class StockDB:
     """
 
     def __init__(self, connection_string, echo=False):
-        self._dbengine = create_engine(connection_string, echo=echo)
+        self._dbengine = create_engine(connection_string, echo=echo,
+                                       poolclass=NullPool)
         self._dbsession_factory = sessionmaker(bind=self._dbengine)
         self._dbsession = self._dbsession_factory(autocommit=False)
 
@@ -716,10 +718,13 @@ class EODPrices_log(SQLBASE):
 
 class Update_log(SQLBASE):
     __tablename__ = 'update_log'
-    table = Column(String, primary_key=True)
-    update_dt = Column(DateTime, primary_key=True)
-    update_type = Column(String, primary_key=True)
-    used_credits = Column(Integer)
-    new_records = Column(Integer)
-    deleted_records = Column(Integer)
-    updated_records = Column(Integer)
+    id = Column(Integer, primary_key=True)
+    table_name = Column(String)
+    start_datetime = Column(DateTime)
+    end_datetime = Column(DateTime)
+    elapsed_seconds = Column(Numeric)
+    num_api_queries = Column(Integer)
+    num_api_requests = Column(Integer)
+    num_new_records = Column(Integer)
+    num_update_records = Column(Integer)
+    num_insert_records = Column(Integer)
