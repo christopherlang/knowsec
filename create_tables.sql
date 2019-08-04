@@ -1,23 +1,6 @@
 CREATE TABLE public.securities
 (
-    id VARCHAR(250) NOT NULL,
-    ticker VARCHAR(250) NOT NULL,
-    company_id VARCHAR(250),
-    figi VARCHAR(250),
-    composite_figi VARCHAR(250),
-    composite_ticker VARCHAR(250),
-    name VARCHAR(250),
-    currency VARCHAR(250),
-    share_class_figi VARCHAR(250),
-    code VARCHAR(250),
-    active BOOLEAN,
-    delisted BOOLEAN,
-    PRIMARY KEY (id, ticker)
-)
-
-CREATE TABLE public.securities
-(
-    id VARCHAR(100) NOT NULL PRIMARY KEY,
+    secid VARCHAR(100) NOT NULL PRIMARY KEY,
     company_id VARCHAR(100),
     name VARCHAR(250),
     type VARCHAR(100),
@@ -51,7 +34,7 @@ CREATE TABLE public.securities
 
 CREATE TABLE public.exchanges
 (
-    id VARCHAR(100) NOT NULL,
+    EXCID VARCHAR(100) NOT NULL,
     mic VARCHAR(250) NOT NULL,
     acronym VARCHAR(250),
     name VARCHAR(250),
@@ -61,13 +44,13 @@ CREATE TABLE public.exchanges
     website VARCHAR(1000),
     first_stock_price_date date,
     last_stock_price_date date,
-    PRIMARY KEY (id, mic)
+    PRIMARY KEY (EXCID, mic)
 )
 
 
 CREATE TABLE public.security_prices
 (
-    ticker VARCHAR(50) NOT NULL,
+    secid VARCHAR(50) NOT NULL REFERENCES securities(secid) ON DELETE RESTRICT,
     date DATE NOT NULL,
     frequency VARCHAR(50) NOT NULL,
     intraperiod BOOLEAN NOT NULL,
@@ -81,7 +64,21 @@ CREATE TABLE public.security_prices
     adj_high DECIMAL(100, 20),
     adj_close DECIMAL(100, 20),
     adj_volume DECIMAL(100, 20),
-    PRIMARY KEY (ticker, date, frequency, intraperiod)
+    PRIMARY KEY (secid, date, frequency, intraperiod)
+)
+
+CREATE TABLE public.update_log
+(
+    id SERIAL PRIMARY KEY,
+    table_name VARCHAR(50) NOT NULL,
+    start_datetime TIMESTAMPTZ NOT NULL,
+    end_datetime TIMESTAMPTZ NOT NULL,
+    elapsed_seconds DECIMAL(50, 4) NOT NULL,
+    num_api_queries INT,
+    num_api_requests INT,
+    num_new_records INT,
+    num_update_records INT,
+    num_insert_records INT
 )
 
 -- Code for droping and recreating the prices_log table
@@ -89,7 +86,7 @@ DROP TABLE public.prices_log;
 
 CREATE TABLE public.prices_log
 (
-    ticker VARCHAR(50) NOT NULL PRIMARY KEY,
+    secid VARCHAR(50) NOT NULL PRIMARY KEY REFERENCES securities(secid) ON DELETE RESTRICT,
     min_date DATE NOT NULL,
     max_date DATE NOT NULL,
     update_dt TIMESTAMPTZ,
