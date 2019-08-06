@@ -30,7 +30,7 @@ with open('../config/config.yaml', 'r') as f:
     AWSS3 = boto3.client('s3', aws_access_key_id=s3_access_id,
                          aws_secret_access_key=s3_secret_key)
 
-TODAYET = dateut.lag(dateut.today(), 3, 'day')
+TODAYET = dateut.today()
 IGNORETIME = CONFIG['general']['ignore_time']
 DBCOMMIT = CONFIG['general']['commit_database']
 
