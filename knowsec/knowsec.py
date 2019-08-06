@@ -390,21 +390,30 @@ if __name__ == '__main__':
             try:
                 main()
 
+                LG.log_info("main execution completed")
+
                 logpath = LG.logfile[0]['filename']
                 log_filename = os.path.basename(logpath)
                 s3_path = 'knowsec/dbupdate_logs/'
                 s3_path += os.path.basename(log_filename)
+
+                LG.log_info(f"saving log file '{logpath}' to S3 '{s3_path}'")
+
                 AWSS3.upload_file(logpath, 'prometheus-project', s3_path)
 
+                LG.log_info(f"removing log file {logpath}")
                 os.remove(logpath)
 
             except Exception:
+                # TODO capture error and output message to log file
                 pass
 
             finally:
                 if DBCOMMIT is True:
+                    LG.log_info('committing changes on database')
                     DBASE.commit()
 
+                LG.log_info('closing logger and database connections')
                 LG.close()
                 DBASE.close()
 
