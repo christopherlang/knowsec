@@ -374,11 +374,12 @@ if __name__ == '__main__':
     if dateut.is_business_day(TODAYET):
         curr_time = dateut.now().time()
         fivepm = datetime.time(17)
-        midnight = datetime.time(0)
+        b_midnight = datetime.time(23, 59, 59)
+        a_midnight = datetime.time(0, 0, 1)
         fiveam = datetime.time(5)
 
-        if ((curr_time >= fivepm and curr_time < midnight) or
-                (curr_time >= midnight and curr_time < fiveam) or
+        if ((curr_time >= fivepm and curr_time < b_midnight) or
+                (curr_time >= a_midnight and curr_time < fiveam) or
                 IGNORETIME):
 
             LG = easylog.Easylog(create_console=False)
