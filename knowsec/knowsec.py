@@ -396,7 +396,7 @@ if __name__ == '__main__':
                 s3_path += os.path.basename(log_filename)
                 AWSS3.upload_file(logpath, 'prometheus-project', s3_path)
 
-                os.remove(log_filename)
+                os.remove(logpath)
 
             except Exception:
                 pass
