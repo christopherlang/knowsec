@@ -13,7 +13,7 @@ import pandas
 import timetrack
 import boto3
 
-PVERSION = '0.0.0.9999'
+PVERSION = '0.1.0'
 
 with open('../config/config.yaml', 'r') as f:
     CONFIG = yaml.load(f, Loader=yaml.SafeLoader)
