@@ -31,7 +31,7 @@ with open('../config/config.yaml', 'r') as f:
                          aws_secret_access_key=s3_secret_key)
 
 TODAYET = dateut.today()
-IGNORETIME = CONFIG['general']['ignore_time']
+FORCERUN = CONFIG['general']['force_run']
 DBCOMMIT = CONFIG['general']['commit_database']
 
 
@@ -371,7 +371,7 @@ class DuplicationError(Exception):
 
 
 if __name__ == '__main__':
-    if dateut.is_business_day(TODAYET):
+    if dateut.is_business_day(TODAYET) or FORCERUN:
         curr_time = dateut.now().time()
         fivepm = datetime.time(17)
         b_midnight = datetime.time(23, 59, 59)
@@ -380,7 +380,7 @@ if __name__ == '__main__':
 
         if ((curr_time >= fivepm and curr_time < b_midnight) or
                 (curr_time >= a_midnight and curr_time < fiveam) or
-                IGNORETIME):
+                FORCERUN):
 
             LG = easylog.Easylog(create_console=False)
             LG.add_filelogger('../log/knowsec.log')
@@ -404,9 +404,8 @@ if __name__ == '__main__':
                 LG.log_info(f"removing log file {logpath}")
                 os.remove(logpath)
 
-            except Exception:
-                # TODO capture error and output message to log file
-                pass
+            except Exception as err:
+                LG.log_error(f"security update loop failed: {err}")
 
             finally:
                 if DBCOMMIT is True:
