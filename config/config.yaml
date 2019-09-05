@@ -1,7 +1,7 @@
 general:
   max_retries_intrinio: 20
-  commit_database: False
-  force_run: True
+  commit_database: True
+  force_run: False
 
 dbserver:
   uid: titus
