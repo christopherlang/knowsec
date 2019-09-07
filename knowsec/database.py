@@ -362,6 +362,38 @@ class StockDB:
 
         return result
 
+    def bulk_record_exists(self, tablename, records, group='secid'):
+        table_obj = self.table_class(tablename)
+        table_cols = sql_utils.get_columns(table_obj)
+        pkeys = self.table_keys(tablename)
+
+        try:
+            group_index = pkeys.index(group)
+        except ValueError:
+            raise ValueError(f"'{group}' is not a primary key")
+
+        recids = [tuple([i[j] for j in pkeys]) for i in records]
+        recids_grouped = recids.copy()
+        recids_grouped.sort(key=lambda x: x[group_index])
+
+        exists_results = list()
+        grp_iter = itertools.groupby(recids_grouped,
+                                     key=lambda x: x[group_index])
+        for a_group in grp_iter:
+            filter_value = a_group[0]
+            recs = list(a_group[1])
+
+            query = self._dbsession.query(*[table_cols[i] for i in pkeys])
+            query = query.filter(table_cols[group] == filter_value)
+            query = query.distinct()
+
+            query_result = set(query.all())
+            exists_results.extend([(i, i in query_result) for i in recs])
+
+        exists_results.sort(key=lambda x: recids.index(x[0]))
+
+        return [i[1] for i in exists_results]
+
     def _construct_filter(self, filters, tablename, query=None):
         table_class = self.table_class(tablename)
         table_cols = sql_utils.get_columns(table_class)
